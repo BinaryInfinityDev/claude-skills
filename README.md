@@ -1,6 +1,7 @@
 Categorize the skills.# Claude Skills
 
-A collection of reusable [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for git workflows, artifact management, and decision recording.
+A collection of reusable [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for git workflows,
+artifact management, and decision recording.
 
 ## Skills
 
@@ -33,7 +34,9 @@ cp -r skills/start-session ~/.claude/skills/
 
 ## How skills work
 
-Each skill is a self-contained `SKILL.md` file with YAML frontmatter (`name`, `description`) and detailed instructions that Claude Code follows when the skill is triggered. Skills are project-agnostic by default — they read per-project config from `.claude/*.yaml` files rather than hard-coding paths.
+Each skill is a self-contained `SKILL.md` file with YAML frontmatter (`name`, `description`) and detailed instructions
+that Claude Code follows when the skill is triggered. Skills are project-agnostic by default — they read per-project
+config from `.claude/*.yaml` files rather than hard-coding paths.
 
 See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) for more on custom skills.
 

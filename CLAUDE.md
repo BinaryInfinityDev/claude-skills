@@ -1,6 +1,7 @@
 # Claude Skills Repository
 
-A public collection of reusable Claude Code skills — project-agnostic automation for git workflows, artifact management, and decision recording.
+A public collection of reusable Claude Code skills — project-agnostic automation for git workflows, artifact management,
+and decision recording.
 
 ## Repository structure
 
@@ -11,11 +12,14 @@ skills/
     references/     — optional supporting files (templates, schemas, examples)
 ```
 
-Each skill lives in its own directory under `skills/`. The `SKILL.md` file is the complete, self-contained skill definition that can be copied into any project's `.claude/skills/` directory or linked as a user-level skill in `~/.claude/skills/`.
+Each skill lives in its own directory under `skills/`. The `SKILL.md` file is the complete, self-contained skill
+definition that can be copied into any project's `.claude/skills/` directory or linked as a user-level skill in
+`~/.claude/skills/`.
 
 ## Conventions
 
-- Skills are **project-agnostic** unless their name includes a project prefix (e.g., `arda-end-session`). Project-specific skills are included as reference implementations.
+- Skills are **project-agnostic** unless their name includes a project prefix (e.g., `arda-end-session`).
+  Project-specific skills are included as reference implementations.
 - Each SKILL.md uses YAML frontmatter with `name` and `description` fields.
 - Skills read per-project config from `.claude/*.yaml` files — they never hard-code paths or project-specific details.
 - Trigger phrases are documented at the bottom of each SKILL.md.

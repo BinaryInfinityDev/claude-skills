@@ -1,14 +1,19 @@
 ---
 name: end-session
-description: Finalize a git session branch — write a session summary, run project-specific finalization, and merge to the main branch with a structured commit. Use when the user says "end session", "wrap up", "session complete", or invokes /end-session.
+description:
+  Finalize a git session branch — write a session summary, run project-specific finalization, and merge to the main
+  branch with a structured commit. Use when the user says "end session", "wrap up", "session complete", or invokes
+  /end-session.
 source: https://github.com/bamapookie/claude-skills/blob/main/skills/end-session/SKILL.md
 ---
 
 # End Session
 
-Finalize the current git session branch by writing a session summary, running optional project-specific finalization, and merging into the main branch with a structured commit.
+Finalize the current git session branch by writing a session summary, running optional project-specific finalization,
+and merging into the main branch with a structured commit.
 
-This skill is **project-agnostic**. Project-specific behavior (where summaries live, what extra files to update) is supplied by config and a project-scoped follow-up skill.
+This skill is **project-agnostic**. Project-specific behavior (where summaries live, what extra files to update) is
+supplied by config and a project-scoped follow-up skill.
 
 ---
 
@@ -31,7 +36,8 @@ The skill resolves configuration in this order (each layer overrides the previou
 | `finalize_skill` | `session-finalize`                                       | Project skill to invoke between summary and merge. Skip silently if not in available list. |
 | `co_author`      | `Co-Authored-By: Claude {model} <noreply@anthropic.com>` | Trailer for commits; `{model}` substituted with running-model name (e.g. `Opus 4.7`)       |
 
-If `.claude/session.yaml` is missing, run with defaults. If a project's `CLAUDE.md` documents session conventions, honor those as additional constraints (template format, mandatory sections, etc.).
+If `.claude/session.yaml` is missing, run with defaults. If a project's `CLAUDE.md` documents session conventions, honor
+those as additional constraints (template format, mandatory sections, etc.).
 
 ---
 
@@ -39,10 +45,15 @@ If `.claude/session.yaml` is missing, run with defaults. If a project's `CLAUDE.
 
 Run these before any state-changing operation. If any fails, stop and report.
 
-1. **Repo state** — run `git status -sb` and `git log {main_branch}..HEAD --oneline` in parallel. Note any uncommitted files for step 4.
-2. **Branch** — current branch must match `branch_regex`. Extract `{date}` and `{nn}`. If on `main_branch` or any non-matching branch, abort with: _"Not on a session branch matching `{branch_regex}`. Start one with `git checkout -b session/YYYY-MM-DD-NN` (or your project's convention)."_
-3. **Main is current** — `git fetch --dry-run`. If main is behind origin, ask whether to `git pull --ff-only` before merging. Do not pull without asking.
-4. **CLAUDE.md scan** — if a `CLAUDE.md` exists, read it for project-specific session conventions (file paths, additional artifacts to update, model-name format).
+1. **Repo state** — run `git status -sb` and `git log {main_branch}..HEAD --oneline` in parallel. Note any uncommitted
+   files for step 4.
+2. **Branch** — current branch must match `branch_regex`. Extract `{date}` and `{nn}`. If on `main_branch` or any
+   non-matching branch, abort with: _"Not on a session branch matching `{branch_regex}`. Start one with
+   `git checkout -b session/YYYY-MM-DD-NN` (or your project's convention)."_
+3. **Main is current** — `git fetch --dry-run`. If main is behind origin, ask whether to `git pull --ff-only` before
+   merging. Do not pull without asking.
+4. **CLAUDE.md scan** — if a `CLAUDE.md` exists, read it for project-specific session conventions (file paths,
+   additional artifacts to update, model-name format).
 
 ---
 
@@ -70,8 +81,8 @@ Default summary content (project's `CLAUDE.md` may specify a stricter template �
 ```markdown
 # Session {nn} — {date}
 
-**Tool:** {Claude Code CLI | Claude desktop app | other — ask if unclear}
-**Participants:** {user name from `git config --get user.name`}, Claude ({model})
+**Tool:** {Claude Code CLI | Claude desktop app | other — ask if unclear} **Participants:** {user name from
+`git config --get user.name`}, Claude ({model})
 
 ## Summary
 
@@ -96,10 +107,12 @@ Show the draft to the user before committing if anything is ambiguous.
 
 Check the available-skills list (system reminder) for a skill matching `finalize_skill` (default: `session-finalize`).
 
-- **If present:** invoke it via the Skill tool. Pass context if the skill accepts args: `date={date} nn={nn} summary_path={path} branch={branch}`.
+- **If present:** invoke it via the Skill tool. Pass context if the skill accepts args:
+  `date={date} nn={nn} summary_path={path} branch={branch}`.
 - **If absent:** continue without comment. Projects without project-specific finalization are valid.
 
-The finalize skill handles things like sidebar entries, index tables, cross-reference files — anything beyond the session summary itself.
+The finalize skill handles things like sidebar entries, index tables, cross-reference files — anything beyond the
+session summary itself.
 
 ### 4. Commit pending changes
 
@@ -107,7 +120,8 @@ If pre-flight found uncommitted changes:
 
 - Show the user the change list.
 - Ask: _"Include these in the session before merging? Or stash them?"_
-- If including: stage the relevant files by name (never `git add -A`), then commit with a clear imperative-mood message + the `co_author` trailer.
+- If including: stage the relevant files by name (never `git add -A`), then commit with a clear imperative-mood
+  message + the `co_author` trailer.
 - If stashing: `git stash push -m "WIP after session/{date}-{nn}"` so they're recoverable.
 
 The session summary file written in step 2 must be committed before merging.
@@ -148,7 +162,8 @@ Show:
 - **Detached HEAD** — abort, ask the user to check out a proper session branch first.
 - **Branch name doesn't match `branch_regex`** — abort with the expected pattern in the message.
 - **Main is behind origin** — ask before pulling. Never pull silently.
-- **User asks to delete the session branch** — only after the merge succeeded and was pushed (if applicable). Branch deletion is destructive; require explicit confirmation each time, not session-level pre-authorization.
+- **User asks to delete the session branch** — only after the merge succeeded and was pushed (if applicable). Branch
+  deletion is destructive; require explicit confirmation each time, not session-level pre-authorization.
 
 ---
 

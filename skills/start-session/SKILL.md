@@ -1,13 +1,17 @@
 ---
 name: start-session
-description: Start or resume a git session branch — detect current state, pull main if needed, and create or continue a session/YYYY-MM-DD-NN branch. Use when the user says "start session", "new session", "begin session", or invokes /start-session.
+description:
+  Start or resume a git session branch — detect current state, pull main if needed, and create or continue a
+  session/YYYY-MM-DD-NN branch. Use when the user says "start session", "new session", "begin session", or invokes
+  /start-session.
 model: haiku
 source: https://github.com/bamapookie/claude-skills/blob/main/skills/start-session/SKILL.md
 ---
 
 # Start Session
 
-Detect the current git state and either resume an existing session branch or create a new one. This skill ensures the working tree is ready for a focused unit of work.
+Detect the current git state and either resume an existing session branch or create a new one. This skill ensures the
+working tree is ready for a focused unit of work.
 
 This skill is **project-agnostic**. It reads `.claude/session.yaml` for overrides if present, otherwise uses defaults.
 
@@ -63,7 +67,8 @@ Check if main is behind origin:
 git rev-list --count HEAD..origin/{main_branch}
 ```
 
-- If behind (count > 0): run `git pull --ff-only`. If ff-only fails (diverged), stop and report — do not force-pull or rebase without user direction.
+- If behind (count > 0): run `git pull --ff-only`. If ff-only fails (diverged), stop and report — do not force-pull or
+  rebase without user direction.
 - If up to date: continue.
 
 **Step B — Determine session number:**
@@ -97,7 +102,8 @@ The user might be on a feature branch or something else.
 
 - **Report:** "Currently on `{branch}`, which isn't a session branch or `{main_branch}`."
 - **Ask:** "Switch to `{main_branch}` and start a new session, or stay here?"
-- If switching: check for uncommitted changes first — offer to stash if any exist, then `git checkout {main_branch}` and proceed with Case 2.
+- If switching: check for uncommitted changes first — offer to stash if any exist, then `git checkout {main_branch}` and
+  proceed with Case 2.
 - If staying: stop. The user knows what they're doing.
 
 ---
@@ -106,7 +112,8 @@ The user might be on a feature branch or something else.
 
 This skill never discards work. If uncommitted changes exist at any decision point:
 
-- **On main before branching:** they carry into the new session branch automatically (git preserves working tree on branch creation). Mention this.
+- **On main before branching:** they carry into the new session branch automatically (git preserves working tree on
+  branch creation). Mention this.
 - **On a non-session branch:** offer to stash before switching.
 - **Already on a session branch:** just note them and continue.
 

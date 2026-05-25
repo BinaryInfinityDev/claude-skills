@@ -1,15 +1,19 @@
 ---
 name: ingest-artifact
-description: Ingest raw lab data (zone files, configs, exports) into the project's artifact store — write the file, update the catalog index. Use when the user provides raw data to archive, or invokes /ingest-artifact.
+description:
+  Ingest raw lab data (zone files, configs, exports) into the project's artifact store — write the file, update the
+  catalog index. Use when the user provides raw data to archive, or invokes /ingest-artifact.
 model: haiku
 source: https://github.com/bamapookie/claude-skills/blob/main/skills/ingest-artifact/SKILL.md
 ---
 
 # Ingest Artifact
 
-Accept raw data from the user (pasted content, a local file path, or command output), store it in the project's artifact directory in the appropriate format, and update the catalog index.
+Accept raw data from the user (pasted content, a local file path, or command output), store it in the project's artifact
+directory in the appropriate format, and update the catalog index.
 
-This skill is **project-agnostic**. It reads `.claude/artifacts.yaml` for project-specific conventions (paths, catalog format, subdirectories). Without config, it defaults to a simple `./artifacts/` directory with markdown wrappers.
+This skill is **project-agnostic**. It reads `.claude/artifacts.yaml` for project-specific conventions (paths, catalog
+format, subdirectories). Without config, it defaults to a simple `./artifacts/` directory with markdown wrappers.
 
 ---
 
@@ -30,8 +34,10 @@ Read `.claude/artifacts.yaml` at the repo root. If absent, use defaults.
 
 ### Storage modes
 
-- **Raw file** — the export file is stored verbatim (no markdown wrapping). Best for stable outputs from scripts where overwriting on re-export is expected. The catalog row carries all metadata.
-- **Markdown wrapper** — a `.md` page with a metadata table and the raw content in a fenced code block. Best for hand-curated data, one-off exports, or artifacts that need a rendered site URL for cross-linking.
+- **Raw file** — the export file is stored verbatim (no markdown wrapping). Best for stable outputs from scripts where
+  overwriting on re-export is expected. The catalog row carries all metadata.
+- **Markdown wrapper** — a `.md` page with a metadata table and the raw content in a fenced code block. Best for
+  hand-curated data, one-off exports, or artifacts that need a rendered site URL for cross-linking.
 
 The user chooses the mode at ingest time (or the skill recommends based on source).
 
@@ -45,7 +51,8 @@ Sources:
 
 - **Pasted in conversation** — user pastes raw content directly
 - **Local file path** — user points to a file on disk (e.g., "ingest `/tmp/zone-export.txt`")
-- **Command output** — user says "run `cat /etc/pihole/...` and ingest the result" (only if the user instructs the command)
+- **Command output** — user says "run `cat /etc/pihole/...` and ingest the result" (only if the user instructs the
+  command)
 
 Read the content. Detect or ask:
 
@@ -72,7 +79,8 @@ Ask the user to confirm the choice.
 
 **Raw file mode:**
 
-Write to `{raw_dir}/{category}/{filename}`. The file content is stored exactly as received — no modification, no wrapping.
+Write to `{raw_dir}/{category}/{filename}`. The file content is stored exactly as received — no modification, no
+wrapping.
 
 **Wrapper mode:**
 
@@ -92,9 +100,7 @@ title: "{descriptive title}"
 
 ---
 
-\`\`\`{syntax}
-{raw content verbatim}
-\`\`\`
+\`\`\`{syntax} {raw content verbatim} \`\`\`
 ```
 
 Preserve the raw content exactly — no reformatting, no trailing-whitespace trimming, no line-ending normalization.
@@ -103,7 +109,8 @@ Preserve the raw content exactly — no reformatting, no trailing-whitespace tri
 
 Add a row to the catalog table in `catalog_file`.
 
-**Placement:** append at the end of the existing table rows (chronological — newest last). If the table is organized by section/category, insert under the matching group.
+**Placement:** append at the end of the existing table rows (chronological — newest last). If the table is organized by
+section/category, insert under the matching group.
 
 **Row format** matches `catalog_columns` config. Default:
 
@@ -118,7 +125,8 @@ The link format depends on storage mode:
 
 ### 5. Sidebar entry (if configured)
 
-By default, artifacts do NOT get individual sidebar entries — the catalog is the discovery mechanism. If the project's config specifies `sidebar_file` and `sidebar_section`, add an entry there.
+By default, artifacts do NOT get individual sidebar entries — the catalog is the discovery mechanism. If the project's
+config specifies `sidebar_file` and `sidebar_section`, add an entry there.
 
 ### 6. Report
 
@@ -135,7 +143,8 @@ Show:
 
 If the target file already exists:
 
-- **Raw file mode:** overwrite in place (this is expected — re-exports update the file). Update the `Last Exported` date in the catalog row.
+- **Raw file mode:** overwrite in place (this is expected — re-exports update the file). Update the `Last Exported` date
+  in the catalog row.
 - **Wrapper mode:** ask before overwriting. Show a diff of the raw content block (old vs. new) so the user can confirm.
 
 In both cases, do NOT create a duplicate catalog entry — update the existing row's date.
@@ -149,16 +158,20 @@ After ingesting, scan for inconsistencies between the new artifact and existing 
 - If the artifact is a DNS zone: compare IPs and hostnames against what's documented in the lab reference pages.
 - If the artifact is a config: compare service names, ports, paths against the relevant service pages.
 
-If discrepancies are found, report them to the user. Do not auto-edit the documentation — flag as potential tasks for review.
+If discrepancies are found, report them to the user. Do not auto-edit the documentation — flag as potential tasks for
+review.
 
 ---
 
 ## Edge cases
 
-- **Binary files** (images, compiled exports) — store as raw files only. Cannot be wrapped in markdown code blocks. Note this in the catalog description.
-- **Very large files** (>500 lines) — still store verbatim. For the wrapper format, warn the user that long code blocks may impact page load; suggest raw file mode instead.
+- **Binary files** (images, compiled exports) — store as raw files only. Cannot be wrapped in markdown code blocks. Note
+  this in the catalog description.
+- **Very large files** (>500 lines) — still store verbatim. For the wrapper format, warn the user that long code blocks
+  may impact page load; suggest raw file mode instead.
 - **Missing subdirectory** — create it. No special setup needed beyond the directory.
-- **Content with triple-backtick fences** — use a longer fence (``````) or tildes (`~~~`) for the outer wrapper to avoid conflicts.
+- **Content with triple-backtick fences** — use a longer fence (``````) or tildes (`~~~`) for the outer wrapper to avoid
+  conflicts.
 
 ---
 
