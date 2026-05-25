@@ -19,14 +19,14 @@ Read `.claude/artifacts.yaml` at the repo root. If absent, use defaults.
 
 ### Config keys
 
-| Key               | Default                        | Purpose                                                                              |
-| ----------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
-| `raw_dir`         | `null`                         | Directory for raw static files (served verbatim). If null, only wrapper mode is used |
-| `wrapper_dir`     | `./artifacts/`                 | Directory for `.md` wrapper pages                                                    |
-| `catalog_file`    | `{wrapper_dir}/index.md`       | Path to the catalog/index file                                                       |
-| `subdirectories`  | `{}`                           | Map of category name → subdirectory + description                                    |
-| `naming`          | `lowercase-hyphenated`         | Filename convention                                                                  |
-| `catalog_columns` | `[Artifact, Type, Source, Last Exported]` | Column headings for the catalog table                                     |
+| Key               | Default                                   | Purpose                                                                              |
+| ----------------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| `raw_dir`         | `null`                                    | Directory for raw static files (served verbatim). If null, only wrapper mode is used |
+| `wrapper_dir`     | `./artifacts/`                            | Directory for `.md` wrapper pages                                                    |
+| `catalog_file`    | `{wrapper_dir}/index.md`                  | Path to the catalog/index file                                                       |
+| `subdirectories`  | `{}`                                      | Map of category name → subdirectory + description                                    |
+| `naming`          | `lowercase-hyphenated`                    | Filename convention                                                                  |
+| `catalog_columns` | `[Artifact, Type, Source, Last Exported]` | Column headings for the catalog table                                                |
 
 ### Storage modes
 
@@ -49,13 +49,13 @@ Sources:
 
 Read the content. Detect or ask:
 
-| Field         | How to determine                                                                                     |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| **Syntax**    | Auto-detect from content or extension: `zone`, `json`, `yaml`, `ini`, `toml`, `xml`, `sh`, `conf`   |
-| **Category**  | Ask the user to pick from `subdirectories` keys, or infer from content type                          |
-| **Name**      | Derive from the content (e.g., zone `$ORIGIN` → `arda.kovalchick.me.zone`) or ask                   |
-| **Source**    | Ask: what host/system/tool produced this?                                                            |
-| **Date**      | Today, unless the user specifies otherwise or the content contains a generation timestamp            |
+| Field        | How to determine                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| **Syntax**   | Auto-detect from content or extension: `zone`, `json`, `yaml`, `ini`, `toml`, `xml`, `sh`, `conf` |
+| **Category** | Ask the user to pick from `subdirectories` keys, or infer from content type                       |
+| **Name**     | Derive from the content (e.g., zone `$ORIGIN` → `arda.kovalchick.me.zone`) or ask                 |
+| **Source**   | Ask: what host/system/tool produced this?                                                         |
+| **Date**     | Today, unless the user specifies otherwise or the content contains a generation timestamp         |
 
 ### 2. Choose storage mode
 
@@ -83,12 +83,12 @@ Write to `{wrapper_dir}/{category}/{slug}.md`:
 title: "{descriptive title}"
 ---
 
-| Field           | Value                                    |
-| --------------- | ---------------------------------------- |
-| **Type**        | {type — e.g., dns-zone, config, export}  |
-| **Source**      | {host or system}                         |
-| **Exported**    | {YYYY-MM-DD}                             |
-| **Description** | {one-line description}                   |
+| Field           | Value                                   |
+| --------------- | --------------------------------------- |
+| **Type**        | {type — e.g., dns-zone, config, export} |
+| **Source**      | {host or system}                        |
+| **Exported**    | {YYYY-MM-DD}                            |
+| **Description** | {one-line description}                  |
 
 ---
 
@@ -112,6 +112,7 @@ Add a row to the catalog table in `catalog_file`.
 ```
 
 The link format depends on storage mode:
+
 - Raw file: absolute path from site root (e.g., `/artifacts/dns/file.zone`)
 - Wrapper: relative path from the catalog (e.g., `dns/slug`)
 
@@ -122,6 +123,7 @@ By default, artifacts do NOT get individual sidebar entries — the catalog is t
 ### 6. Report
 
 Show:
+
 - File written (with full path)
 - Catalog row added
 - The URL where the artifact will be accessible on the built site

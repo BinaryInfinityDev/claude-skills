@@ -22,14 +22,14 @@ The skill resolves configuration in this order (each layer overrides the previou
 
 ### Config keys
 
-| Key              | Default                                        | Purpose                                                                                    |
-| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `summary_dir`    | `./sessions/`                                  | Directory where session summary files are written                                          |
-| `summary_name`   | `session-{date}-{nn}.md`                       | Filename pattern; `{date}` = YYYY-MM-DD, `{nn}` = 2-digit session number                   |
-| `branch_regex`   | `^session/(\d{4}-\d{2}-\d{2})-(\d{2})$`        | Current branch must match; capture group 1 = date, group 2 = session number                |
-| `main_branch`    | `main`                                         | Branch to merge into                                                                       |
-| `finalize_skill` | `session-finalize`                             | Project skill to invoke between summary and merge. Skip silently if not in available list. |
-| `co_author`      | `Co-Authored-By: Claude {model} <noreply@anthropic.com>` | Trailer for commits; `{model}` substituted with running-model name (e.g. `Opus 4.7`) |
+| Key              | Default                                                  | Purpose                                                                                    |
+| ---------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `summary_dir`    | `./sessions/`                                            | Directory where session summary files are written                                          |
+| `summary_name`   | `session-{date}-{nn}.md`                                 | Filename pattern; `{date}` = YYYY-MM-DD, `{nn}` = 2-digit session number                   |
+| `branch_regex`   | `^session/(\d{4}-\d{2}-\d{2})-(\d{2})$`                  | Current branch must match; capture group 1 = date, group 2 = session number                |
+| `main_branch`    | `main`                                                   | Branch to merge into                                                                       |
+| `finalize_skill` | `session-finalize`                                       | Project skill to invoke between summary and merge. Skip silently if not in available list. |
+| `co_author`      | `Co-Authored-By: Claude {model} <noreply@anthropic.com>` | Trailer for commits; `{model}` substituted with running-model name (e.g. `Opus 4.7`)       |
 
 If `.claude/session.yaml` is missing, run with defaults. If a project's `CLAUDE.md` documents session conventions, honor those as additional constraints (template format, mandatory sections, etc.).
 
@@ -40,7 +40,7 @@ If `.claude/session.yaml` is missing, run with defaults. If a project's `CLAUDE.
 Run these before any state-changing operation. If any fails, stop and report.
 
 1. **Repo state** — run `git status -sb` and `git log {main_branch}..HEAD --oneline` in parallel. Note any uncommitted files for step 4.
-2. **Branch** — current branch must match `branch_regex`. Extract `{date}` and `{nn}`. If on `main_branch` or any non-matching branch, abort with: *"Not on a session branch matching `{branch_regex}`. Start one with `git checkout -b session/YYYY-MM-DD-NN` (or your project's convention)."*
+2. **Branch** — current branch must match `branch_regex`. Extract `{date}` and `{nn}`. If on `main_branch` or any non-matching branch, abort with: _"Not on a session branch matching `{branch_regex}`. Start one with `git checkout -b session/YYYY-MM-DD-NN` (or your project's convention)."_
 3. **Main is current** — `git fetch --dry-run`. If main is behind origin, ask whether to `git pull --ff-only` before merging. Do not pull without asking.
 4. **CLAUDE.md scan** — if a `CLAUDE.md` exists, read it for project-specific session conventions (file paths, additional artifacts to update, model-name format).
 
@@ -106,7 +106,7 @@ The finalize skill handles things like sidebar entries, index tables, cross-refe
 If pre-flight found uncommitted changes:
 
 - Show the user the change list.
-- Ask: *"Include these in the session before merging? Or stash them?"*
+- Ask: _"Include these in the session before merging? Or stash them?"_
 - If including: stage the relevant files by name (never `git add -A`), then commit with a clear imperative-mood message + the `co_author` trailer.
 - If stashing: `git stash push -m "WIP after session/{date}-{nn}"` so they're recoverable.
 
@@ -144,7 +144,7 @@ Show:
 ## Failure modes
 
 - **Merge conflict** — stop, list conflicting files, ask the user how to proceed. Do not auto-resolve.
-- **Pre-commit hook fails** — fix the underlying issue, re-stage, create a *new* commit. Never `--amend` to bypass.
+- **Pre-commit hook fails** — fix the underlying issue, re-stage, create a _new_ commit. Never `--amend` to bypass.
 - **Detached HEAD** — abort, ask the user to check out a proper session branch first.
 - **Branch name doesn't match `branch_regex`** — abort with the expected pattern in the message.
 - **Main is behind origin** — ask before pulling. Never pull silently.

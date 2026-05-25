@@ -6,18 +6,18 @@ A collection of reusable [Claude Code](https://docs.anthropic.com/en/docs/claude
 
 ### Git Workflow
 
-| Skill | Description |
-| ----- | ----------- |
-| [start-session](skills/start-session/SKILL.md) | Start or resume a git session branch |
-| [end-session](skills/end-session/SKILL.md) | Finalize a session branch — summary, finalize hook, merge |
-| [arda-end-session](skills/arda-end-session/SKILL.md) | Project-specific session finalization for Arda Net |
+| Skill                                                | Description                                               |
+| ---------------------------------------------------- | --------------------------------------------------------- |
+| [start-session](skills/start-session/SKILL.md)       | Start or resume a git session branch                      |
+| [end-session](skills/end-session/SKILL.md)           | Finalize a session branch — summary, finalize hook, merge |
+| [arda-end-session](skills/arda-end-session/SKILL.md) | Project-specific session finalization for Arda Net        |
 
 ### Project Management
 
-| Skill | Description |
-| ----- | ----------- |
+| Skill                                              | Description                                     |
+| -------------------------------------------------- | ----------------------------------------------- |
 | [ingest-artifact](skills/ingest-artifact/SKILL.md) | Ingest raw data into a project's artifact store |
-| [record-decision](skills/record-decision/SKILL.md) | Record a numbered architecture/design decision |
+| [record-decision](skills/record-decision/SKILL.md) | Record a numbered architecture/design decision  |
 
 ## Installation
 

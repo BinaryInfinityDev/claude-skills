@@ -17,10 +17,10 @@ This skill is **project-agnostic**. It reads `.claude/session.yaml` for override
 
 Same config file as `end-session` (`.claude/session.yaml`). Relevant keys:
 
-| Key            | Default                                        | Purpose                                          |
-| -------------- | ---------------------------------------------- | ------------------------------------------------ |
-| `branch_regex` | `^session/(\d{4}-\d{2}-\d{2})-(\d{2})$`        | Pattern for session branches                     |
-| `main_branch`  | `main`                                         | Branch to pull from and diverge from             |
+| Key            | Default                                                  | Purpose                                       |
+| -------------- | -------------------------------------------------------- | --------------------------------------------- |
+| `branch_regex` | `^session/(\d{4}-\d{2}-\d{2})-(\d{2})$`                  | Pattern for session branches                  |
+| `main_branch`  | `main`                                                   | Branch to pull from and diverge from          |
 | `co_author`    | `Co-Authored-By: Claude {model} <noreply@anthropic.com>` | Noted for the session — used in commits later |
 
 ---

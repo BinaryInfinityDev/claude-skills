@@ -28,12 +28,12 @@ Each skill lives in its own directory under `skills/`. The `SKILL.md` file is th
 
 ## Skill catalog
 
-| Skill | Description |
-| ----- | ----------- |
-| [start-session](skills/start-session/SKILL.md) | Start or resume a git session branch |
-| [end-session](skills/end-session/SKILL.md) | Finalize a session branch — summary, finalize hook, merge |
-| [ingest-artifact](skills/ingest-artifact/SKILL.md) | Ingest raw data into a project's artifact store |
-| [record-decision](skills/record-decision/SKILL.md) | Record a numbered architecture/design decision |
+| Skill                                                | Description                                                                   |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [start-session](skills/start-session/SKILL.md)       | Start or resume a git session branch                                          |
+| [end-session](skills/end-session/SKILL.md)           | Finalize a session branch — summary, finalize hook, merge                     |
+| [ingest-artifact](skills/ingest-artifact/SKILL.md)   | Ingest raw data into a project's artifact store                               |
+| [record-decision](skills/record-decision/SKILL.md)   | Record a numbered architecture/design decision                                |
 | [arda-end-session](skills/arda-end-session/SKILL.md) | Project-specific session finalization for Arda Net (reference implementation) |
 
 ## Installing a skill

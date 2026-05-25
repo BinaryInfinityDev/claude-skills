@@ -18,19 +18,19 @@ Read `.claude/decisions.yaml` at the repo root. If absent, use defaults.
 
 ### Config keys
 
-| Key              | Default                           | Purpose                                                            |
-| ---------------- | --------------------------------- | ------------------------------------------------------------------ |
-| `decisions_dir`  | `./decisions/`                    | Directory containing decision files                                |
-| `index_file`     | `null` (no index)                 | Path to a summary index file; if set, a one-line entry is added    |
-| `layout`         | `one-per-file`                    | How decisions are stored: `one-per-file`, `single-file`, or `topic-split` |
-| `prefix`         | `ADR-`                            | Numbering prefix                                                   |
-| `padding`        | `4`                               | Zero-padding width (e.g., 4 → `ADR-0001`)                          |
-| `topics`         | `null`                            | Map of topic name → filename (required when `layout: topic-split`) |
-| `sections`       | `[Context, Decision, Consequences]` | Ordered list of section headings for each full entry              |
-| `heading_level`  | `##`                              | Markdown heading level for each decision                           |
-| `title_style`    | `inline`                          | `inline` (title in heading) or `bold-below` (title as bold line after heading) |
-| `index_format`   | (see below)                       | Template for the index entry                                       |
-| `anchor_style`   | `default`                         | `default` (rehype-slug from full heading) or `number-only` (heading contains only the number) |
+| Key             | Default                             | Purpose                                                                                       |
+| --------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| `decisions_dir` | `./decisions/`                      | Directory containing decision files                                                           |
+| `index_file`    | `null` (no index)                   | Path to a summary index file; if set, a one-line entry is added                               |
+| `layout`        | `one-per-file`                      | How decisions are stored: `one-per-file`, `single-file`, or `topic-split`                     |
+| `prefix`        | `ADR-`                              | Numbering prefix                                                                              |
+| `padding`       | `4`                                 | Zero-padding width (e.g., 4 → `ADR-0001`)                                                     |
+| `topics`        | `null`                              | Map of topic name → filename (required when `layout: topic-split`)                            |
+| `sections`      | `[Context, Decision, Consequences]` | Ordered list of section headings for each full entry                                          |
+| `heading_level` | `##`                                | Markdown heading level for each decision                                                      |
+| `title_style`   | `inline`                            | `inline` (title in heading) or `bold-below` (title as bold line after heading)                |
+| `index_format`  | (see below)                         | Template for the index entry                                                                  |
+| `anchor_style`  | `default`                           | `default` (rehype-slug from full heading) or `number-only` (heading contains only the number) |
 
 ### Layout modes
 
@@ -52,12 +52,12 @@ For `topic-split` layout, scan ALL topic files — decisions share a single glob
 
 The skill needs:
 
-| Input      | Source                                                                                       |
-| ---------- | -------------------------------------------------------------------------------------------- |
-| **Title**  | From the user's message, or ask                                                              |
-| **Topic**  | Ask the user to pick from `topics` keys (only for `topic-split` layout)                      |
-| **Date**   | Today's date (YYYY-MM-DD)                                                                    |
-| **Body**   | Each configured section — synthesize from conversation context, or ask for each              |
+| Input     | Source                                                                          |
+| --------- | ------------------------------------------------------------------------------- |
+| **Title** | From the user's message, or ask                                                 |
+| **Topic** | Ask the user to pick from `topics` keys (only for `topic-split` layout)         |
+| **Date**  | Today's date (YYYY-MM-DD)                                                       |
+| **Body**  | Each configured section — synthesize from conversation context, or ask for each |
 
 If the decision has already been discussed in the conversation (user said "let's decide X because Y"), synthesize the sections from context rather than asking the user to re-state everything. Show the draft and ask for confirmation.
 
@@ -72,17 +72,19 @@ If the decision has already been discussed in the conversation (user said "let's
 **Entry format:**
 
 ```markdown
-{heading_level} {prefix}{number}        ← if anchor_style: number-only, heading is ONLY the number
-                                          if anchor_style: default, title goes in the heading
+{heading_level} {prefix}{number} ← if anchor_style: number-only, heading is ONLY the number
+if anchor_style: default, title goes in the heading
 
-{title as bold line}                     ← only when title_style: bold-below
+{title as bold line} ← only when title_style: bold-below
 
 **{sections[0]}:** ...
 
 **{sections[1]}:**
+
 - ...
 
 **{sections[2]}:**
+
 - ...
 ```
 
@@ -107,6 +109,7 @@ If `index_file` is set, add an entry. The entry format is controlled by `index_f
 ### 5. Report
 
 Show:
+
 - Decision number assigned
 - File written (with path)
 - Index entry added (if applicable)
