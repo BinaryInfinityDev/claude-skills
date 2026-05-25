@@ -1,6 +1,7 @@
 ---
 name: start-session
 description: Start or resume a git session branch — detect current state, pull main if needed, and create or continue a session/YYYY-MM-DD-NN branch. Use when the user says "start session", "new session", "begin session", or invokes /start-session.
+model: haiku
 source: https://github.com/bamapookie/claude-skills/blob/main/skills/start-session/SKILL.md
 ---
 
