@@ -4,7 +4,7 @@ description:
   Arda Net project finalization — add the new session to the Starlight sidebar in astro.config.mjs and a row to the
   Sessions table in activity-index.md. Invoked by the generic end-session skill before merge.
 model: haiku
-source: https://github.com/bamapookie/claude-skills/blob/main/skills/arda-end-session/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/arda-end-session/SKILL.md
 ---
 
 # Session Finalize — Arda Net

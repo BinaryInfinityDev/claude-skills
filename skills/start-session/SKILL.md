@@ -5,7 +5,7 @@ description:
   session/YYYY-MM-DD-NN branch. Use when the user says "start session", "new session", "begin session", or invokes
   /start-session.
 model: haiku
-source: https://github.com/bamapookie/claude-skills/blob/main/skills/start-session/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/start-session/SKILL.md
 ---
 
 # Start Session
