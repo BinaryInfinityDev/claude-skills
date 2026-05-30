@@ -5,7 +5,7 @@
   "description": "Reusable Claude Code skills for git workflows, artifact management, and decision recording.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bamapookie/claude-skills.git"
+    "url": "git+https://github.com/BinaryInfinityDev/claude-skills.git"
   },
   "license": "ISC",
   "scripts": {
