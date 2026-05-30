@@ -1,4 +1,4 @@
-Categorize the skills.# Claude Skills
+# Claude Skills
 
 A collection of reusable [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for git workflows,
 artifact management, and decision recording.
