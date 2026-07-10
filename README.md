@@ -20,6 +20,18 @@ artifact management, and decision recording.
 | [ingest-artifact](skills/ingest-artifact/SKILL.md) | Ingest raw data into a project's artifact store |
 | [record-decision](skills/record-decision/SKILL.md) | Record a numbered architecture/design decision  |
 
+### Time Tracking
+
+| Skill                                              | Description                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------------- |
+| [session-timelog](skills/session-timelog/SKILL.md) | Record a session's own usage as a content-free timeline (tracking branch) |
+| [time-report](skills/time-report/SKILL.md)         | Build a time report + timesheet from timelines, commits, and PRs/issues   |
+
+The two work as a pipeline: sessions drop `{timestamp, type, sessionId}` timelines onto a dedicated tracking branch
+(never via a PR, never the raw transcript), and `time-report` pools them with git/GitHub history into a report and a
+per-day timesheet — on demand, at sprint review, or on a schedule. Once a report merges, the consumed timelines can be
+folded into a consolidated CSV and the tracking branch cleared.
+
 ## Installation
 
 Copy a skill directory into your project or user-level Claude config:
