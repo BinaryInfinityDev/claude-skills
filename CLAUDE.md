@@ -39,6 +39,8 @@ definition that can be copied into any project's `.claude/skills/` directory or 
 | [ingest-artifact](skills/ingest-artifact/SKILL.md)   | Ingest raw data into a project's artifact store                               |
 | [record-decision](skills/record-decision/SKILL.md)   | Record a numbered architecture/design decision                                |
 | [arda-end-session](skills/arda-end-session/SKILL.md) | Project-specific session finalization for Arda Net (reference implementation) |
+| [session-timelog](skills/session-timelog/SKILL.md)   | Record a session's own usage as a content-free timeline on a tracking branch  |
+| [time-report](skills/time-report/SKILL.md)           | Build a time report + timesheet from timelines, commits, and PRs/issues       |
 
 ## Installing a skill
 
