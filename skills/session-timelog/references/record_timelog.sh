@@ -7,7 +7,7 @@ BRANCH="${TIMELOG_BRANCH:-metrics/session-timelogs}"
 REMOTE="${TIMELOG_REMOTE:-origin}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-# 1. Locate this session's transcript directory (cwd path, non-alnum -> '-').
+# 1. Locate this session's transcript directory (repo root path, non-alnum -> '-').
 SAN="$(printf '%s' "$REPO_ROOT" | sed 's/[^a-zA-Z0-9]/-/g')"
 PROJ_DIR="$HOME/.claude/projects/$SAN"
 [ -d "$PROJ_DIR" ] || { echo "ERROR: no transcript dir at $PROJ_DIR" >&2; exit 1; }

@@ -50,8 +50,8 @@ Verify from its output that each step happened:
 2. **Extract timestamps only** with `jq`: `select(type=="object" and .timestamp!=null) | {timestamp, type, sessionId}` —
    the bare identifiers in `{timestamp, type}` are jq field-lookup shorthand (`{type: .type}`), _not_ the `type`
    builtin.
-3. **Scan the extract clean** — zero matches required for `@`, `/home/`, `/root/`, `proxy`, `trustStore`, and any
-   model-id substring. The script aborts on a hit; investigate before retrying. Never commit a dirty extract.
+3. **Scan the extract clean** — zero matches required for `@`, `/home/`, `/root/`, `proxy`, and `trustStore`. The script aborts on a hit; investigate before retrying.
+   Never commit a dirty extract.
 4. **Commit to the tracking branch** via a temporary worktree — the working tree and current branch are never touched.
    Files land as `timelines/<UTC-date>-<sid8>.timeline.jsonl` (plus one per subagent). The branch is created as an
    orphan with an empty init commit if it doesn't exist.

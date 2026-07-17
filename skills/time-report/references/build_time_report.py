@@ -53,20 +53,35 @@ def load_events(args):
                 for r in csv.DictReader(f):
                     tx.append(parse_ts(r["timestamp"]))
     if args.commits:
-        for line in open(args.commits):
-            gh.append(parse_ts(line.split("|")[1]))
+        for line in open(args.commits, encoding="utf-8", errors="replace"):
+            parts = line.rstrip("\n").split("|")
+            if len(parts) > 1 and parts[1]:
+                try:
+                    gh.append(parse_ts(parts[1]))
+                except ValueError:
+                    continue
     if args.prs:
-        for line in open(args.prs):
+        for line in open(args.prs, encoding="utf-8", errors="replace"):
             p = line.rstrip("\n").split("|", 5)
+            if len(p) < 4:
+                continue
             for x in (p[1], p[2], p[3]):
                 if x:
-                    gh.append(parse_ts(x))
+                    try:
+                        gh.append(parse_ts(x))
+                    except ValueError:
+                        continue
     if args.issues:
-        for line in open(args.issues):
+        for line in open(args.issues, encoding="utf-8", errors="replace"):
             p = line.rstrip("\n").split("|", 4)
+            if len(p) < 3:
+                continue
             for x in (p[1], p[2]):
                 if x:
-                    gh.append(parse_ts(x))
+                    try:
+                        gh.append(parse_ts(x))
+                    except ValueError:
+                        continue
     return sorted(set(tx)), sorted(gh)
 
 
@@ -124,7 +139,7 @@ def main():
     allev = sorted(tx + gh)
     if not allev:
         sys.exit("no events found")
-    gen = allev[-1].strftime("%Y-%m-%d")
+    gen = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     print(f"pool: {len(allev)} events ({len(tx)} timeline, {len(gh)} git/GitHub), "
           f"{allev[0]:%Y-%m-%d} .. {allev[-1]:%Y-%m-%d} UTC")
 
@@ -137,7 +152,8 @@ def main():
     utc = timezone.utc
     d_act, d_win = daily_totals(split_by_day(b_act, utc)), daily_totals(split_by_day(b_win, utc))
     bad = [d for d in d_act if d_act[d] > d_win.get(d, timedelta()) + timedelta(seconds=1)]
-    assert not bad, f"invariant violated (window < active) on {bad}"
+    if bad:
+        sys.exit(f"invariant violated (window < active) on {bad}")
     t_act, t_win = sum(d_act.values(), timedelta()), sum(d_win.values(), timedelta())
     tdays = {t.astimezone(utc).date() for t in tx}
     first, last = min(d_win), max(d_win)
@@ -215,7 +231,7 @@ def main():
         if wk != cur:
             cur = wk
             partial = " (partial — dataset ends here)" if d.strftime("%G-W%V") == max(dbw).strftime("%G-W%V") else ""
-            T += [f"## Week {wk}{partial} — {H(wl[wk]):.1f} h active", ""]
+            T += [f"## Week {wk}{partial} — {H(wl.get(wk, timedelta())):.1f} h active", ""]
         parts = [f"`{s:%H:%M}–{e:%H:%M}`" for s, e in sorted(dbw[d])]
         T.append(f"**{d} ({d:%a})** — window {H(e_win[d]):.1f} h, active {H(e_act.get(d, timedelta())):.1f} h  ")
         for i in range(0, len(parts), 7):
