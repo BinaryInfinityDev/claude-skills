@@ -37,7 +37,7 @@ if [ -d "$PROJ_DIR/$SID/subagents" ]; then
 fi
 
 # 3. Scan clean: content-free extracts must never carry these.
-HITS=$(grep -rcE '@|/home/|/root/|proxy|trustStore' "$OUT" | awk -F: '{s+=$2} END{print s+0}')
+HITS=$(grep -rcE '@|/home/|/root/|proxy|trustStore' "$OUT" | awk -F: '{s+=$2} END{print s+0}' || true)
 if [ "$HITS" -ne 0 ]; then
   echo "ERROR: extract failed the cleanliness scan ($HITS hits) — not committing." >&2
   grep -rlE '@|/home/|/root/|proxy|trustStore' "$OUT" >&2
