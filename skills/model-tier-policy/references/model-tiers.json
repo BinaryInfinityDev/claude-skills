@@ -2,6 +2,7 @@
   "enabled": true,
   "premium_model_pattern": "fable",
   "read_budget": 8,
+  "reminder_interval": 10,
   "executor_agent": "executor",
   "runner_agent": "runner",
   "scout_agent": "scout",

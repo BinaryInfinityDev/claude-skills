@@ -24,6 +24,7 @@ DEFAULTS = {
     "enabled": True,
     "premium_model_pattern": "fable",
     "read_budget": 8,
+    "reminder_interval": 10,  # consumed by model_tier_context.py, which shares this loader
     "executor_agent": "executor",
     "runner_agent": "runner",
     "scout_agent": "scout",

@@ -158,17 +158,17 @@ python3 /path/to/claude-skills/skills/model-tier-policy/references/install.py --
 
 The installer is idempotent and reports what it changed. It writes:
 
-| File                                  | Role                                                                               |
-| ------------------------------------- | ---------------------------------------------------------------------------------- |
-| `.claude/rules/model-tiers.md`        | Always-loaded rules — in context every session, survives compaction                |
-| `.claude/agents/executor.md`          | Opus, full tools — the default worker                                              |
-| `.claude/agents/runner.md`            | Sonnet, full tools — bulk mechanical work                                          |
-| `.claude/agents/scout.md`             | Opus, read-only — investigation that returns findings, not dumps                   |
-| `.claude/agents/architect.md`         | Fable, read-only — for Opus-led sessions escalating a decision                     |
-| `.claude/hooks/model_tier_guard.py`   | `PreToolUse` — hard-denies procedural tool calls on the premium tier               |
-| `.claude/hooks/model_tier_context.py` | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy every turn |
-| `.claude/model-tiers.json`            | Config (see below)                                                                 |
-| `.claude/settings.json`               | Hook wiring, merged into whatever is already there                                 |
+| File                                  | Role                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `.claude/rules/model-tiers.md`        | Always-loaded rules — in context every session, survives compaction                  |
+| `.claude/agents/executor.md`          | Opus, full tools — the default worker                                                |
+| `.claude/agents/runner.md`            | Sonnet, full tools — bulk mechanical work                                            |
+| `.claude/agents/scout.md`             | Opus, read-only — investigation that returns findings, not dumps                     |
+| `.claude/agents/architect.md`         | Fable, read-only — for Opus-led sessions escalating a decision                       |
+| `.claude/hooks/model_tier_guard.py`   | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
+| `.claude/hooks/model_tier_context.py` | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
+| `.claude/model-tiers.json`            | Config (see below)                                                                   |
+| `.claude/settings.json`               | Hook wiring, merged into whatever is already there                                   |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
 `references/settings-snippet.json` into `.claude/settings.json`.
@@ -186,10 +186,19 @@ weakest to strongest:
 **Layer 1 — always-loaded rules.** `.claude/rules/model-tiers.md` loads into every session at launch, at the same
 priority as `.claude/CLAUDE.md`, and project-root rules are re-injected after compaction.
 
-**Layer 2 — per-turn re-injection.** `model_tier_context.py` runs on `UserPromptSubmit` and appends a compact reminder
-of the active tier and its rules to every single turn. This is what makes forgetting structurally impossible — the
-policy is never more than one turn old, no matter how long the session runs or how many compactions it survives. The
-reminder is deliberately ~12 lines; a reminder that costs real tokens defeats its own purpose.
+**Layer 2 — periodic re-injection.** `model_tier_context.py` runs on `UserPromptSubmit` and appends a reminder of the
+active tier and its rules, so the policy is never far from the end of the context window no matter how long the session
+runs or how many compactions it survives.
+
+Injected context attaches to the turn's user message and stays in the transcript, so it **accumulates** — a full
+reminder every turn would cost ~250 tokens per turn cumulatively, which in a premium session spends exactly the budget
+the policy exists to protect. So the full ~12-line text lands on turn 1 and every `reminder_interval` turns after
+(default 10), with a one-line marker naming the tier and pointing at the rules file in between. `SessionStart` and
+`PostCompact` always re-anchor with the full text and restart the count, so the reminder is at its strongest right after
+a context loss. Steady state is ~76 tokens per turn.
+
+Set `reminder_interval` to `1` for the full text every turn, or drop the `UserPromptSubmit` entry from `settings.json`
+to keep re-anchoring only at session start and after compaction.
 
 **Layer 3 — the guard hook.** `model_tier_guard.py` runs on `PreToolUse` for every tool call and returns
 `permissionDecision: "deny"` when the premium tier reaches for a procedural tool. This is enforcement, not persuasion:
@@ -233,6 +242,7 @@ PyYAML happens to be installed).
 | `enabled`               | `true`                                                                         | Master switch — `false` disables both hooks entirely                        |
 | `premium_model_pattern` | `"fable"`                                                                      | Case-insensitive regex matched against the live model ID                    |
 | `read_budget`           | `8`                                                                            | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
+| `reminder_interval`     | `10`                                                                           | Turns between full policy re-injections; `1` sends it every turn            |
 | `write_allow`           | `[".claude/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Globs the premium tier may write                                            |
 | `bash_allow`            | `[]`                                                                           | Regexes for shell commands the premium tier may run                         |
 | `procedural_tools`      | (see `references/model-tiers.json`)                                            | Regexes for tool names denied on the premium tier                           |

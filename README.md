@@ -40,7 +40,8 @@ folded into a consolidated CSV and the tracking branch cleared.
 
 Ships an always-loaded rules file, four pinned-model subagents, and two hooks. A `PreToolUse` guard hard-denies edits,
 shell commands, workflows, and unpinned subagent spawns while the main loop is on the premium tier, and a
-`UserPromptSubmit` hook re-injects the policy every turn so it survives long sessions and compaction.
+`UserPromptSubmit` hook re-injects the policy periodically — in full every 10th turn and after every compaction, with a
+one-line marker in between — so it survives long sessions without the reminder itself becoming a context cost.
 
 ## Installation
 
