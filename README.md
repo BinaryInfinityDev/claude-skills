@@ -32,6 +32,16 @@ The two work as a pipeline: sessions drop `{timestamp, type, sessionId}` timelin
 per-day timesheet — on demand, at sprint review, or on a schedule. Once a report merges, the consumed timelines can be
 folded into a consolidated CSV and the tracking branch cleared.
 
+### Model Budget
+
+| Skill                                                  | Description                                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 (or Sonnet 5) does the procedural work |
+
+Ships an always-loaded rules file, four pinned-model subagents, and two hooks. A `PreToolUse` guard hard-denies edits,
+shell commands, workflows, and unpinned subagent spawns while the main loop is on the premium tier, and a
+`UserPromptSubmit` hook re-injects the policy every turn so it survives long sessions and compaction.
+
 ## Installation
 
 Copy a skill directory into your project or user-level Claude config:

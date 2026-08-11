@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "premium_model_pattern": "fable",
+  "read_budget": 8,
+  "executor_agent": "executor",
+  "runner_agent": "runner",
+  "scout_agent": "scout",
+  "architect_agent": "architect",
+  "write_allow": [
+    ".claude/plans/**",
+    "**/*.plan.md",
+    ".claude/decisions/**",
+    "decisions/**"
+  ],
+  "bash_allow": [],
+  "research_tools": ["^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
+  "procedural_tools": [
+    "^(Edit|MultiEdit|Write|NotebookEdit)$",
+    "^(Bash|BashOutput|KillShell)$",
+    "^Workflow$",
+    "^mcp__github__(create|update|push|merge|delete|add_|sub_issue|fork|assign|request_|resolve|unresolve|run_|actions_run|issue_write|pull_request_review_write)"
+  ]
+}

@@ -2,3 +2,5 @@
 *.iml
 claude-skills.iml
 node_modules/
+__pycache__/
+*.pyc
