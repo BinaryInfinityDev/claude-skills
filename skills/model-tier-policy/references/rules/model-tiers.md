@@ -1,12 +1,13 @@
 # Model tier policy
 
-Work is split by model tier. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
+Work is split by model tier across four roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
 
-| Tier          | Model                        | Owns                                                                          |
-| ------------- | ---------------------------- | ----------------------------------------------------------------------------- |
-| **Architect** | Fable 5 (`claude-fable-5`)   | Framing, trade-offs, architecture, decomposition, acceptance criteria, review |
-| **Executor**  | Opus 5 (`claude-opus-5`)     | All implementation, commands, tests, git, investigation — **the default**     |
-| **Runner**    | Sonnet 5 (`claude-sonnet-5`) | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage   |
+| Role          | Agent       | Model                               | Owns                                                                          |
+| ------------- | ----------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| **Architect** | `architect` | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review |
+| **Executor**  | `executor`  | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**         |
+| **Scout**     | `scout`     | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius  |
+| **Runner**    | `runner`    | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage   |
 
 The premium tier's scarce resource is its **context**, not its time.
 

@@ -23,16 +23,24 @@ enforce the split mechanically so the working model cannot quietly drift back in
 
 ---
 
-## The tiers
+## The roles
 
-| Tier                    | Model                        | Owns                                                                                             |
-| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Architect** (premium) | Fable 5 (`claude-fable-5`)   | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review |
-| **Executor** (default)  | Opus 5 (`claude-opus-5`)     | All implementation: edits, refactors, tests, builds, git, debugging, investigation               |
-| **Runner** (bulk)       | Sonnet 5 (`claude-sonnet-5`) | High-volume mechanical work: repetitive renames, formatting sweeps, boilerplate, log triage      |
+Four roles, each pinned to a model. Three of them ship as subagents the architect delegates to; the architect is whoever
+holds the premium session.
+
+| Role                    | Agent       | Model                               | Owns                                                                                             |
+| ----------------------- | ----------- | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Architect** (premium) | `architect` | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review |
+| **Executor** (default)  | `executor`  | Opus 5 (`claude-opus-5`)            | All implementation: edits, refactors, tests, builds, git, debugging                              |
+| **Scout** (research)    | `scout`     | Opus 5 (`claude-opus-5`), read-only | Investigation: how something works, where it lives, why it breaks, what the blast radius is      |
+| **Runner** (bulk)       | `runner`    | Sonnet 5 (`claude-sonnet-5`)        | High-volume mechanical work: repetitive renames, formatting sweeps, boilerplate, log triage      |
 
 **Opus is the default worker.** Reach for Sonnet only when the task is genuinely mechanical and voluminous enough that
 the tier difference matters. When unsure between Opus and Sonnet, pick Opus.
+
+**Scout is the one to reach for most often and remember least.** Every question you would answer by reading files is a
+scout's job — it reads in its own context and returns findings, so the premium window never sees the files. The
+`architect` agent exists for the mirror case: a worker-tier session escalating a decision upward.
 
 ### What "procedural" means
 
