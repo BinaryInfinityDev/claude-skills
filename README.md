@@ -38,14 +38,22 @@ folded into a consolidated CSV and the tracking branch cleared.
 | ------------------------------------------------------ | ------------------------------------------------------------------------ |
 | [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 (or Sonnet 5) does the procedural work |
 
-Four roles, each pinned to a model: `architect` (Fable 5) frames and decides, `executor` (Opus 5) implements, `scout`
-(Opus 5, read-only) investigates and returns findings instead of file contents, and `runner` (Sonnet 5) handles bulk
-mechanical work.
+Five roles, each pinned to a model: `architect` (Fable 5) frames and decides, `executor` (Opus 5) implements, `scout`
+(Opus 5, read-only) investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only)
+optionally stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work.
 
-Ships an always-loaded rules file, those four subagents, and two hooks. A `PreToolUse` guard hard-denies edits, shell
-commands, workflows, and unpinned subagent spawns while the main loop is on the premium tier, and a `UserPromptSubmit`
-hook re-injects the policy periodically — in full every 10th turn and after every compaction, with a one-line marker in
-between — so it survives long sessions without the reminder itself becoming a context cost.
+Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
+the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
+
+```bash
+python3 skills/model-tier-policy/references/install.py --target /path/to/repo
+```
+
+The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, those four subagents,
+and two hooks. A `PreToolUse` guard hard-denies edits, shell commands, workflows, and unpinned subagent spawns while the
+main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the policy periodically — in full every 10th
+turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
+itself becoming a context cost.
 
 ## Installation
 
