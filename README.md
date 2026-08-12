@@ -55,6 +55,38 @@ main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the p
 turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
 itself becoming a context cost.
 
+## Rules
+
+Rules are always-loaded instruction blocks — the modular form of CLAUDE.md. Drop one in `.claude/rules/` and it enters
+context at the start of every session, at the same priority as `.claude/CLAUDE.md`. Unlike skills, they need no trigger;
+unlike a growing CLAUDE.md, each covers one topic in its own file.
+
+| Rule                                         | Description                                                                 |
+| -------------------------------------------- | --------------------------------------------------------------------------- |
+| [git-etiquette](rules/git-etiquette/RULE.md) | Semi-linear history: branch, rebase, merge-commit, and force-push etiquette |
+
+Install a rule by copying its `RULE.md` to `.claude/rules/{name}.md`:
+
+```bash
+cp rules/git-etiquette/RULE.md /path/to/repo/.claude/rules/git-etiquette.md
+```
+
+Or symlink it, if you want one shared copy across several repos — `.claude/rules/` resolves symlinks:
+
+```bash
+ln -s ~/src/claude-skills/rules/git-etiquette/RULE.md /path/to/repo/.claude/rules/git-etiquette.md
+```
+
+For personal rules that apply everywhere, use `~/.claude/rules/` instead. To scope a rule to part of a repo, add a
+`paths:` frontmatter block and it loads only when Claude touches matching files:
+
+```markdown
+---
+paths:
+  - "src/api/**/*.ts"
+---
+```
+
 ## Installation
 
 Copy a skill directory into your project or user-level Claude config:
@@ -77,9 +109,20 @@ See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) 
 
 ## Contributing
 
+For a skill:
+
 1. Create `skills/{skill-name}/SKILL.md` with frontmatter and full instructions.
 2. Add reference files (schemas, templates) to `skills/{skill-name}/references/` if needed.
-3. Open a PR.
+3. Add it to the skill catalog above.
+
+For a rule:
+
+1. Create `rules/{rule-name}/RULE.md` — the complete block, written to be installed verbatim, with no `name` or
+   `description` frontmatter (it would cost context in every session).
+2. Add it to the rule catalog above.
+
+Then open a PR. This repo keeps semi-linear history — see [rules/git-etiquette](rules/git-etiquette/RULE.md), which it
+follows itself.
 
 ## License
 
