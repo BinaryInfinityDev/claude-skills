@@ -9,13 +9,14 @@
   "architect_agent": "architect",
   "write_allow": [
     ".claude/plans/**",
+    "docs/plans/**",
     "**/*.plan.md",
     ".claude/decisions/**",
     "decisions/**"
   ],
   "bash_allow": [],
   "research_tools": ["^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
-  "procedural_tools": [
+  "procedural_tools_denied": [
     "^(Edit|MultiEdit|Write|NotebookEdit)$",
     "^(Bash|BashOutput|KillShell)$",
     "^Workflow$",

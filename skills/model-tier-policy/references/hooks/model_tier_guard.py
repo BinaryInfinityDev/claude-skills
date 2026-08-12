@@ -29,10 +29,16 @@ DEFAULTS = {
     "runner_agent": "runner",
     "scout_agent": "scout",
     "architect_agent": "architect",
-    "write_allow": [".claude/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"],
+    "write_allow": [
+        ".claude/plans/**",
+        "docs/plans/**",
+        "**/*.plan.md",
+        ".claude/decisions/**",
+        "decisions/**",
+    ],
     "bash_allow": [],
     "research_tools": [r"^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
-    "procedural_tools": [
+    "procedural_tools_denied": [
         r"^(Edit|MultiEdit|Write|NotebookEdit)$",
         r"^(Bash|BashOutput|KillShell)$",
         r"^Workflow$",
@@ -247,7 +253,7 @@ def main():
             deny(reason)
         allow()
 
-    if matches_any(cfg["procedural_tools"], tool):
+    if matches_any(cfg["procedural_tools_denied"], tool):
         if tool in WRITE_TOOLS:
             target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
             if path_allowed(root, target, cfg["write_allow"]):

@@ -108,7 +108,8 @@ the editor yourself.
 A short, deliberate whitelist:
 
 - Think, plan, decide, review
-- Write plan and decision files (`.claude/plans/**`, `**/*.plan.md`, `.claude/decisions/**`, `decisions/**`)
+- Write plan and decision files (`.claude/plans/**`, `docs/plans/**`, `**/*.plan.md`, `.claude/decisions/**`,
+  `decisions/**`)
 - A small orientation budget of reads/greps — **8 calls per turn by default**, enforced by the hook. Past that, send a
   `scout`. The budget exists so you can glance at one or two key files, not so you can survey the repo.
 - Talk to the user, ask clarifying questions, spawn subagents
@@ -237,19 +238,19 @@ denied — forks always inherit the parent model.
 `.claude/model-tiers.json` (the hooks are dependency-free and read JSON; `.claude/model-tiers.yaml` is also read when
 PyYAML happens to be installed).
 
-| Key                     | Default                                                                        | Purpose                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `enabled`               | `true`                                                                         | Master switch — `false` disables both hooks entirely                        |
-| `premium_model_pattern` | `"fable"`                                                                      | Case-insensitive regex matched against the live model ID                    |
-| `read_budget`           | `8`                                                                            | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
-| `reminder_interval`     | `10`                                                                           | Turns between full policy re-injections; `1` sends it every turn            |
-| `write_allow`           | `[".claude/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Globs the premium tier may write                                            |
-| `bash_allow`            | `[]`                                                                           | Regexes for shell commands the premium tier may run                         |
-| `procedural_tools`      | (see `references/model-tiers.json`)                                            | Regexes for tool names denied on the premium tier                           |
-| `research_tools`        | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                | Regexes for the budgeted read family                                        |
-| `executor_agent`        | `"executor"`                                                                   | Agent name cited in denial messages                                         |
-| `runner_agent`          | `"runner"`                                                                     | Bulk-work agent name                                                        |
-| `scout_agent`           | `"scout"`                                                                      | Read-only investigation agent name                                          |
+| Key                       | Default                                                                                         | Purpose                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `enabled`                 | `true`                                                                                          | Master switch — `false` disables both hooks entirely                        |
+| `premium_model_pattern`   | `"fable"`                                                                                       | Case-insensitive regex matched against the live model ID                    |
+| `read_budget`             | `8`                                                                                             | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
+| `reminder_interval`       | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
+| `write_allow`             | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Globs the premium tier may write                                            |
+| `bash_allow`              | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
+| `procedural_tools_denied` | (see `references/model-tiers.json`)                                                             | Regexes for tool names denied on the premium tier                           |
+| `research_tools`          | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
+| `executor_agent`          | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
+| `runner_agent`            | `"runner"`                                                                                      | Bulk-work agent name                                                        |
+| `scout_agent`             | `"scout"`                                                                                       | Read-only investigation agent name                                          |
 
 ### Escape hatch
 
