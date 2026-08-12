@@ -162,15 +162,27 @@ def matches_any(patterns, value):
 
 
 def path_allowed(root, path, globs):
+    """True when path is inside the project root AND matches one of the repo-relative globs.
+
+    Containment is checked before glob matching, and it is not optional. `fnmatch` treats `*` as matching `/` too, so a
+    permissive-looking entry like `**/*.plan.md` matches `../../tmp/foo.plan.md` and `/etc/cron.d/x.plan.md` just as
+    happily as a path in the repo. Without the containment gate the allowlist would sanction writes anywhere on the
+    filesystem.
+
+    Paths are resolved with realpath so a symlink inside the repo cannot be used to land the write outside it, and the
+    globs are matched only against the repo-relative form — an absolute candidate would reopen the same hole.
+    """
     if not path:
         return False
-    absolute = path if os.path.isabs(path) else os.path.join(root, path)
     try:
-        relative = os.path.relpath(os.path.normpath(absolute), root)
-    except ValueError:
+        root_abs = os.path.realpath(root)
+        absolute = os.path.realpath(path if os.path.isabs(path) else os.path.join(root, path))
+        relative = os.path.relpath(absolute, root_abs)
+    except (ValueError, OSError):
         return False
-    candidates = (relative, "./" + relative, os.path.normpath(absolute))
-    return any(fnmatch.fnmatch(c, g) for g in globs for c in candidates)
+    if os.path.isabs(relative) or relative == os.pardir or relative.startswith(os.pardir + os.sep):
+        return False  # outside the project root
+    return any(fnmatch.fnmatch(c, g) for g in globs for c in (relative, "./" + relative))
 
 
 def bump_read_count(session_key, turn_key, call_key):
@@ -201,7 +213,14 @@ def bump_read_count(session_key, turn_key, call_key):
 
 
 def agent_pins_model(root, agent_type, premium):
-    """True when the named agent definition pins a non-premium model."""
+    """True when the named agent definition pins a non-premium model.
+
+    `agent_type` comes from tool input and is interpolated into a path, so it is restricted to a bare filename here —
+    otherwise a name like `../../some/other` would read a file outside the agents directory and take its `model:` line
+    as the pin.
+    """
+    if not agent_type or os.sep in agent_type or (os.altsep and os.altsep in agent_type) or os.pardir in agent_type:
+        return False
     for base in (os.path.join(root, ".claude", "agents"), os.path.expanduser("~/.claude/agents")):
         path = os.path.join(base, "%s.md" % agent_type)
         if not os.path.exists(path):

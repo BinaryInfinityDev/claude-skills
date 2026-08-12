@@ -275,7 +275,7 @@ than a retry loop.
 
 | Tool                                        | Decision                                                                                                                  |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Edit` / `Write` / `NotebookEdit`           | Denied, unless the path matches `write_allowed` (plan and decision files)                                                 |
+| `Edit` / `Write` / `NotebookEdit`           | Denied, unless the path is inside the repo _and_ matches `write_allowed` (plan and decision files)                        |
 | `Bash` / `BashOutput` / `KillShell`         | Denied, unless the command matches a `bash_allowed` regex (empty by default)                                              |
 | `Read`/`Grep`/`Glob`/`WebFetch`/`WebSearch` | Allowed up to `read_budget` calls per turn, then denied with a pointer to `scout`                                         |
 | `Agent`                                     | Denied unless the call pins a non-premium model — see below                                                               |
@@ -288,6 +288,12 @@ spawns a general-purpose agent runs that agent _on Fable_ — the most expensive
 an `Agent` call only when the model is pinned: an explicit non-premium `model` parameter, or a `subagent_type` whose
 definition file pins one. `Explore` is allowed unpinned because Claude Code caps it at Opus on the Claude API. `fork` is
 denied — forks always inherit the parent model.
+
+**`write_allowed` globs are repo-relative, and containment is checked first.** A path is resolved (following symlinks)
+and rejected outright if it lands outside the project root, before any glob is matched. This is not belt-and-braces:
+`fnmatch` treats `*` as matching `/` as well, so an innocuous-looking `**/*.plan.md` matches `../../tmp/foo.plan.md` and
+`/etc/cron.d/x.plan.md` exactly as readily as a path in the repo. Without the containment gate the allowlist would
+sanction writes anywhere on the filesystem. An absolute glob will therefore never match — scope entries to the repo.
 
 ---
 
@@ -302,7 +308,7 @@ PyYAML happens to be installed).
 | `premium_model_pattern`   | `"fable"`                                                                                       | Case-insensitive regex matched against the live model ID                    |
 | `read_budget`             | `8`                                                                                             | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
 | `reminder_interval`       | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
-| `write_allowed`           | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Globs the premium tier may write                                            |
+| `write_allowed`           | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Repo-relative globs the premium tier may write (see below)                  |
 | `bash_allowed`            | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
 | `procedural_tools_denied` | (see `references/model-tiers.json`)                                                             | Regexes for tool names denied on the premium tier                           |
 | `research_tools_allowed`  | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
