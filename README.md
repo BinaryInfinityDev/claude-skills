@@ -38,14 +38,63 @@ folded into a consolidated CSV and the tracking branch cleared.
 | ------------------------------------------------------ | ------------------------------------------------------------------------ |
 | [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 (or Sonnet 5) does the procedural work |
 
-Four roles, each pinned to a model: `architect` (Fable 5) frames and decides, `executor` (Opus 5) implements, `scout`
-(Opus 5, read-only) investigates and returns findings instead of file contents, and `runner` (Sonnet 5) handles bulk
-mechanical work.
+Five roles, each pinned to a model: `architect` (Fable 5) frames and decides, `executor` (Opus 5) implements, `scout`
+(Opus 5, read-only) investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only)
+optionally stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work.
 
-Ships an always-loaded rules file, those four subagents, and two hooks. A `PreToolUse` guard hard-denies edits, shell
-commands, workflows, and unpinned subagent spawns while the main loop is on the premium tier, and a `UserPromptSubmit`
-hook re-injects the policy periodically — in full every 10th turn and after every compaction, with a one-line marker in
-between — so it survives long sessions without the reminder itself becoming a context cost.
+Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
+the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
+
+```bash
+python3 skills/model-tier-policy/references/install.py --target /path/to/repo
+```
+
+The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, those four subagents,
+and two hooks. A `PreToolUse` guard hard-denies edits, shell commands, workflows, and unpinned subagent spawns while the
+main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the policy periodically — in full every 10th
+turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
+itself becoming a context cost.
+
+## Rules
+
+Rules are always-loaded instruction blocks — the modular form of CLAUDE.md. Drop one in `.claude/rules/` and it enters
+context at the start of every session, at the same priority as `.claude/CLAUDE.md`. Unlike skills, they need no trigger;
+unlike a growing CLAUDE.md, each covers one topic in its own file.
+
+Rules are grouped by category: `rules/{category}/{rule-name}.md`.
+
+### Git Etiquette
+
+| Rule                                                              | Description                                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [semi-linear-history](rules/git-etiquette/semi-linear-history.md) | Branch, rebase onto base, merge with a merge commit — plus commit style and force-push etiquette |
+
+## Installing a rule
+
+Copy the rule file into `.claude/rules/`. Claude Code discovers `.md` files there recursively, so keeping the category
+directory works and makes the source obvious:
+
+```bash
+mkdir -p /path/to/repo/.claude/rules/git-etiquette
+cp rules/git-etiquette/semi-linear-history.md /path/to/repo/.claude/rules/git-etiquette/
+```
+
+Or symlink it, if you want one shared copy across several repos — `.claude/rules/` resolves symlinks:
+
+```bash
+ln -s ~/src/claude-skills/rules/git-etiquette/semi-linear-history.md \
+      /path/to/repo/.claude/rules/git-etiquette/semi-linear-history.md
+```
+
+For personal rules that apply everywhere, use `~/.claude/rules/` instead. To scope a rule to part of a repo, add a
+`paths:` frontmatter block and it loads only when Claude touches matching files:
+
+```markdown
+---
+paths:
+  - "src/api/**/*.ts"
+---
+```
 
 ## Installation
 
@@ -69,9 +118,21 @@ See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) 
 
 ## Contributing
 
+For a skill:
+
 1. Create `skills/{skill-name}/SKILL.md` with frontmatter and full instructions.
 2. Add reference files (schemas, templates) to `skills/{skill-name}/references/` if needed.
-3. Open a PR.
+3. Add it to the skill catalog above.
+
+For a rule:
+
+1. Create `rules/{category}/{rule-name}.md` — the complete block, written to be installed verbatim, with no `name` or
+   `description` frontmatter (it would cost context in every session). Reuse an existing category directory, or add one
+   when the topic is genuinely new.
+2. Add it to the rule catalog above, under its category heading.
+
+Then open a PR. This repo keeps semi-linear history — see
+[semi-linear-history](rules/git-etiquette/semi-linear-history.md), which it follows itself.
 
 ## License
 

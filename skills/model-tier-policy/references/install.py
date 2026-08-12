@@ -27,6 +27,7 @@ FILES = [
     ("agents/runner.md", "agents/runner.md"),
     ("agents/scout.md", "agents/scout.md"),
     ("agents/architect.md", "agents/architect.md"),
+    ("agents/devils-advocate.md", "agents/devils-advocate.md"),
     ("hooks/model_tier_guard.py", "hooks/model_tier_guard.py"),
     ("hooks/model_tier_context.py", "hooks/model_tier_context.py"),
 ]
@@ -61,6 +62,19 @@ def merge_hooks(settings, snippet):
     return added
 
 
+def policy_installed(root):
+    """True when a settings.json under root already wires up either of our hooks."""
+    settings = load_json(os.path.join(root, ".claude", "settings.json"))
+    for entries in (settings.get("hooks") or {}).values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            for command in hook_command(entry if isinstance(entry, dict) else {}):
+                if "model_tier_guard.py" in command or "model_tier_context.py" in command:
+                    return True
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="Install the model tier policy.")
     parser.add_argument("--target", default=os.getcwd(), help="repository root (default: cwd)")
@@ -73,6 +87,16 @@ def main():
     if not os.path.isdir(root):
         sys.exit("error: %s is not a directory" % root)
     claude = os.path.join(root, ".claude")
+
+    other = os.path.abspath(args.target) if args.user else os.path.expanduser("~")
+    if os.path.normpath(other) != os.path.normpath(root) and policy_installed(other):
+        print(
+            "warning: the policy is already installed at %s.\n"
+            "         Installing at both scopes runs two copies of each hook per event. The hooks de-duplicate, so\n"
+            "         the read budget and reminder cadence stay correct, but the second copy is wasted work — and\n"
+            "         two configs means edits to one silently do nothing. Pick one scope and remove the other.\n"
+            % os.path.join(other, ".claude")
+        )
 
     plan = []
     for src, dest in FILES + [CONFIG]:
@@ -118,8 +142,11 @@ def main():
             fh.write("\n")
 
     print(
-        "\nInstalled. Start a new session (hooks and rules load at launch) and accept the workspace trust prompt.\n"
-        "Verify: `/context` lists the rules file, and asking a Fable session to edit a file is denied.\n"
+        "\nInstalled. No session restart needed — the hooks are live on the next tool call, so a premium session will\n"
+        "be denied its next edit or build immediately. Accept the workspace trust prompt if asked.\n"
+        "The rules file loads at your next session start; until then the reminder hook carries the same policy, so\n"
+        "nothing is unenforced in the meantime.\n"
+        "Verify: ask the premium tier to run a build — it should be denied with the delegation to use instead.\n"
         "Disable at any time with MODEL_TIER_POLICY=off or \"enabled\": false in .claude/model-tiers.json."
     )
 

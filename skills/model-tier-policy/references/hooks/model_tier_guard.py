@@ -29,6 +29,7 @@ DEFAULTS = {
     "runner_agent": "runner",
     "scout_agent": "scout",
     "architect_agent": "architect",
+    "advocate_agent": "devils-advocate",
     "write_allowed": [
         ".claude/plans/**",
         "docs/plans/**",
@@ -55,19 +56,27 @@ NEVER_UNPINNED = {"fork"}
 
 WRITE_TOOLS = {"Edit", "MultiEdit", "Write", "NotebookEdit"}
 
+DENIAL_FOOTER = (
+    "[This denial is the model tier policy working as intended, not a broken tool or a misconfigured repo. "
+    "Do not debug the environment or look for a workaround — delegate. The user can suspend the policy with "
+    "MODEL_TIER_POLICY=off.]"
+)
+
 
 def allow():
     sys.exit(0)
 
 
 def deny(reason):
+    # The footer matters: without it a denial reads like a broken tool or a misconfigured repo, and the model (or the
+    # user watching it) starts debugging the environment instead of delegating.
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
+                    "permissionDecisionReason": reason + "\n" + DENIAL_FOOTER,
                 }
             }
         )
@@ -79,8 +88,8 @@ def project_dir(payload):
     return os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
 
 
-def load_config(root):
-    cfg = dict(DEFAULTS)
+def apply_config_files(cfg, root):
+    """Overlay any model-tiers config found under root/.claude onto cfg, in place."""
     for name, loader in (("model-tiers.json", json.loads), ("model-tiers.yaml", None)):
         path = os.path.join(root, ".claude", name)
         if not os.path.exists(path):
@@ -97,6 +106,20 @@ def load_config(root):
                 cfg.update(data)
         except Exception:
             pass
+
+
+def load_config(root):
+    """Config layered defaults < user < project, mirroring how Claude Code resolves its own settings.
+
+    The user layer is not optional bookkeeping: hooks always run with $CLAUDE_PROJECT_DIR pointing at the repo, so
+    without this a user-scope install would read only the repo's config — and in a repo with no config at all, would
+    silently ignore ~/.claude/model-tiers.json and fall back to the built-in defaults.
+    """
+    cfg = dict(DEFAULTS)
+    home = os.path.expanduser("~")
+    apply_config_files(cfg, home)
+    if os.path.normpath(root) != os.path.normpath(home):
+        apply_config_files(cfg, root)
     return cfg
 
 
@@ -150,8 +173,13 @@ def path_allowed(root, path, globs):
     return any(fnmatch.fnmatch(c, g) for g in globs for c in candidates)
 
 
-def bump_read_count(session_key, turn_key):
-    """Per-turn counter for read-family calls. Resets when the turn changes."""
+def bump_read_count(session_key, turn_key, call_key):
+    """Per-turn counter for read-family calls. Resets when the turn changes.
+
+    Counts each *tool call* once, not each hook invocation. If the policy is installed at both user and project scope,
+    two copies of this guard fire for the same call; without the `call_key` check that would burn the read budget at
+    twice the configured rate.
+    """
     state_path = os.path.join(tempfile.gettempdir(), "claude-model-tier-%s.json" % re.sub(r"\W", "", session_key)[:64])
     state = {}
     try:
@@ -160,7 +188,10 @@ def bump_read_count(session_key, turn_key):
         pass
     if state.get("turn") != turn_key:
         state = {"turn": turn_key, "count": 0}
+    if call_key and state.get("call") == call_key:
+        return int(state.get("count", 0))  # same tool call, another copy of the hook — already counted
     state["count"] = int(state.get("count", 0)) + 1
+    state["call"] = call_key
     try:
         with open(state_path, "w", encoding="utf-8") as fh:
             json.dump(state, fh)
@@ -291,7 +322,7 @@ def main():
     if budget > 0 and matches_any(cfg["research_tools_allowed"], tool):
         session_key = payload.get("session_id") or "session"
         turn_key = payload.get("prompt_id") or session_key
-        count = bump_read_count(session_key, turn_key)
+        count = bump_read_count(session_key, turn_key, payload.get("tool_use_id"))
         if count > budget:
             deny(
                 "Model tier policy: orientation budget spent (%d/%d reads this turn) on the premium tier (%s). "

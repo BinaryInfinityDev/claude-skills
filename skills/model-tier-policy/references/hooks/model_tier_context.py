@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,6 +26,8 @@ except Exception:  # pragma: no cover - guard missing means policy is not instal
     sys.exit(0)
 
 ANCHOR_EVENTS = ("SessionStart", "PostCompact", "SessionResume")
+# How close together two firings of the same event must be to count as one event handled by two installed copies.
+DEDUPE_WINDOW_SECONDS = 10
 
 PREMIUM = """[model tier policy — active tier: {model} (premium)]
 You plan; you do not implement. Think, decide, review, delegate, and talk to the user.
@@ -59,21 +62,28 @@ WORKER_BRIEF = (
 )
 
 
-def turn_number(session_id, anchor):
-    """Turn counter for this session. Anchor events reset it so the next reminder is a full one."""
+def turn_number(session_id, anchor, dedupe_key):
+    """Turn counter for this session. Anchor events reset it so the next reminder is a full one.
+
+    Returns None when this is a duplicate firing of an event already handled. If the policy is installed at both user
+    and project scope, two copies of this hook run per event; without the check they would inject the reminder twice
+    and advance the counter at twice the rate, so the full text would land every 5 turns instead of every 10.
+    """
     path = os.path.join(tempfile.gettempdir(), "claude-model-tier-ctx-%s.json" % re.sub(r"\W", "", session_id)[:64])
-    if anchor:
-        count = 1
-    else:
-        count = 0
-        try:
-            count = int(json.loads(open(path, encoding="utf-8").read()).get("turns", 0))
-        except Exception:
-            pass
-        count += 1
+    state = {}
+    try:
+        state = json.loads(open(path, encoding="utf-8").read())
+    except Exception:
+        pass
+
+    now = time.time()
+    if state.get("key") == dedupe_key and now - float(state.get("ts") or 0) < DEDUPE_WINDOW_SECONDS:
+        return None
+
+    count = 1 if anchor else int(state.get("turns", 0)) + 1
     try:
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump({"turns": count}, fh)
+            json.dump({"turns": count, "key": dedupe_key, "ts": now}, fh)
     except Exception:
         pass
     return count
@@ -111,10 +121,12 @@ def main():
     except (TypeError, ValueError):
         interval = 10
 
-    if interval <= 1:
-        full = True
-    else:
-        full = turn_number(payload.get("session_id") or "session", anchor) % interval == 1
+    dedupe_key = "%s|%s" % (event, payload.get("prompt_id") or "")
+    turn = turn_number(payload.get("session_id") or "session", anchor, dedupe_key)
+    if turn is None:
+        sys.exit(0)  # another installed copy already injected the reminder for this event
+
+    full = True if interval <= 1 else turn % interval == 1
 
     if premium.search(model):
         template = PREMIUM if full else PREMIUM_BRIEF

@@ -1,13 +1,14 @@
 # Model tier policy
 
-Work is split by model tier across four roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
+Work is split by model tier across five roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
 
-| Role          | Agent       | Model                               | Owns                                                                          |
-| ------------- | ----------- | ----------------------------------- | ----------------------------------------------------------------------------- |
-| **Architect** | `architect` | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review |
-| **Executor**  | `executor`  | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**         |
-| **Scout**     | `scout`     | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius  |
-| **Runner**    | `runner`    | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage   |
+| Role                 | Agent             | Model                               | Owns                                                                             |
+| -------------------- | ----------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| **Architect**        | `architect`       | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review    |
+| **Executor**         | `executor`        | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**            |
+| **Scout**            | `scout`           | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius     |
+| **Devil's advocate** | `devils-advocate` | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict |
+| **Runner**           | `runner`          | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage      |
 
 The premium tier's scarce resource is its **context**, not its time.
 
@@ -18,7 +19,9 @@ The premium tier's scarce resource is its **context**, not its time.
 Do only this: think, plan, decide, review, delegate, talk to the user.
 
 1. Frame the problem and decide the approach.
-2. Write the plan to `.claude/plans/<slug>.plan.md` — the plan file is the contract, and it survives compaction.
+2. Write the plan to `.claude/plans/<slug>.plan.md` — the plan file is the contract, and it survives compaction. For a
+   large, hard-to-reverse, or assumption-heavy change, send it to `devils-advocate` (Opus) before executors start; skip
+   that for routine work.
 3. Delegate every procedural step to the `executor` agent (Opus), `runner` (Sonnet) for bulk mechanical work, or `scout`
    (Opus, read-only) for investigation. Each brief carries: goal, plan file path, scope, acceptance criteria, return
    contract.
