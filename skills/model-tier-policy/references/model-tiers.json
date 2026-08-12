@@ -7,15 +7,17 @@
   "runner_agent": "runner",
   "scout_agent": "scout",
   "architect_agent": "architect",
-  "write_allow": [
+  "write_allowed": [
     ".claude/plans/**",
     "docs/plans/**",
     "**/*.plan.md",
     ".claude/decisions/**",
     "decisions/**"
   ],
-  "bash_allow": [],
-  "research_tools": ["^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
+  "bash_allowed": [],
+  "research_tools_allowed": [
+    "^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"
+  ],
   "procedural_tools_denied": [
     "^(Edit|MultiEdit|Write|NotebookEdit)$",
     "^(Bash|BashOutput|KillShell)$",

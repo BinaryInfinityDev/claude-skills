@@ -29,15 +29,15 @@ DEFAULTS = {
     "runner_agent": "runner",
     "scout_agent": "scout",
     "architect_agent": "architect",
-    "write_allow": [
+    "write_allowed": [
         ".claude/plans/**",
         "docs/plans/**",
         "**/*.plan.md",
         ".claude/decisions/**",
         "decisions/**",
     ],
-    "bash_allow": [],
-    "research_tools": [r"^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
+    "bash_allowed": [],
+    "research_tools_allowed": [r"^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
     "procedural_tools_denied": [
         r"^(Edit|MultiEdit|Write|NotebookEdit)$",
         r"^(Bash|BashOutput|KillShell)$",
@@ -256,18 +256,18 @@ def main():
     if matches_any(cfg["procedural_tools_denied"], tool):
         if tool in WRITE_TOOLS:
             target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
-            if path_allowed(root, target, cfg["write_allow"]):
+            if path_allowed(root, target, cfg["write_allowed"]):
                 allow()
             deny(
                 "Model tier policy: %s is procedural and you are on the premium tier (%s), which plans but does not "
                 "implement.\n%s\nYou may write plan and decision files directly (%s) — put the plan on disk and hand "
                 "the executor its path."
-                % (tool, model, delegate_hint, ", ".join(cfg["write_allow"]))
+                % (tool, model, delegate_hint, ", ".join(cfg["write_allowed"]))
             )
 
         if tool in ("Bash", "BashOutput", "KillShell"):
             command = tool_input.get("command") or ""
-            if command and matches_any(cfg["bash_allow"], command):
+            if command and matches_any(cfg["bash_allowed"], command):
                 allow()
             deny(
                 "Model tier policy: shell commands are procedural and you are on the premium tier (%s).\n%s\n"
@@ -288,7 +288,7 @@ def main():
         )
 
     budget = int(cfg.get("read_budget") or 0)
-    if budget > 0 and matches_any(cfg["research_tools"], tool):
+    if budget > 0 and matches_any(cfg["research_tools_allowed"], tool):
         session_key = payload.get("session_id") or "session"
         turn_key = payload.get("prompt_id") or session_key
         count = bump_read_count(session_key, turn_key)

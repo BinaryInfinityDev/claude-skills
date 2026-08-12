@@ -217,8 +217,8 @@ than a retry loop.
 
 | Tool                                        | Decision                                                                                                                  |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Edit` / `Write` / `NotebookEdit`           | Denied, unless the path matches `write_allow` (plan and decision files)                                                   |
-| `Bash` / `BashOutput` / `KillShell`         | Denied, unless the command matches a `bash_allow` regex (empty by default)                                                |
+| `Edit` / `Write` / `NotebookEdit`           | Denied, unless the path matches `write_allowed` (plan and decision files)                                                 |
+| `Bash` / `BashOutput` / `KillShell`         | Denied, unless the command matches a `bash_allowed` regex (empty by default)                                              |
 | `Read`/`Grep`/`Glob`/`WebFetch`/`WebSearch` | Allowed up to `read_budget` calls per turn, then denied with a pointer to `scout`                                         |
 | `Agent`                                     | Denied unless the call pins a non-premium model — see below                                                               |
 | `Workflow`                                  | Denied — workflow agents inherit the main-loop model, so an unpinned workflow runs the entire fan-out on the premium tier |
@@ -244,10 +244,10 @@ PyYAML happens to be installed).
 | `premium_model_pattern`   | `"fable"`                                                                                       | Case-insensitive regex matched against the live model ID                    |
 | `read_budget`             | `8`                                                                                             | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
 | `reminder_interval`       | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
-| `write_allow`             | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Globs the premium tier may write                                            |
-| `bash_allow`              | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
+| `write_allowed`           | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Globs the premium tier may write                                            |
+| `bash_allowed`            | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
 | `procedural_tools_denied` | (see `references/model-tiers.json`)                                                             | Regexes for tool names denied on the premium tier                           |
-| `research_tools`          | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
+| `research_tools_allowed`  | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
 | `executor_agent`          | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
 | `runner_agent`            | `"runner"`                                                                                      | Bulk-work agent name                                                        |
 | `scout_agent`             | `"scout"`                                                                                       | Read-only investigation agent name                                          |
@@ -258,7 +258,7 @@ The policy is a budget guardrail, not a safety control — the user can always s
 
 - `MODEL_TIER_POLICY=off` in the environment disables both hooks for that session
 - `"enabled": false` in `.claude/model-tiers.json` disables it for the repo
-- Widen `bash_allow` / `write_allow` for a specific recurring need
+- Widen `bash_allowed` / `write_allowed` for a specific recurring need
 
 If the user explicitly asks the premium tier to do something procedural anyway, say the policy blocks it and offer the
 escape hatch — do not silently work around it, and do not argue past their answer.
