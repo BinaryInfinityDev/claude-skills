@@ -11,18 +11,22 @@ skills/
     SKILL.md        — the skill definition (frontmatter + instructions)
     references/     — optional supporting files (templates, schemas, examples)
 rules/
-  {rule-name}/
-    RULE.md         — an always-loaded instruction block, installed to .claude/rules/
+  {category}/
+    {rule-name}.md  — an always-loaded instruction block, installed to .claude/rules/
 ```
 
 Each skill lives in its own directory under `skills/`. The `SKILL.md` file is the complete, self-contained skill
 definition that can be copied into any project's `.claude/skills/` directory or linked as a user-level skill in
 `~/.claude/skills/`.
 
-Rules are the other half: **skills load on demand, rules load always.** A `RULE.md` is copied (or symlinked) to
-`.claude/rules/{name}.md`, where Claude Code loads it at the start of every session at the same priority as
-`.claude/CLAUDE.md`. Use a rule for a standing convention that must always be in context, and a skill for a procedure
-that only matters when invoked.
+Rules are the other half: **skills load on demand, rules load always.** A rule file is copied (or symlinked) into
+`.claude/rules/`, where Claude Code loads it at the start of every session at the same priority as `.claude/CLAUDE.md`.
+Use a rule for a standing convention that must always be in context, and a skill for a procedure that only matters when
+invoked.
+
+Rules are grouped by category directory — `rules/git-etiquette/semi-linear-history.md` — and the catalog in the README
+is organized the same way. Claude Code discovers `.md` files under `.claude/rules/` recursively, so the category
+directory can be preserved on install.
 
 ## Conventions
 
@@ -31,10 +35,11 @@ that only matters when invoked.
 - Each SKILL.md uses YAML frontmatter with `name` and `description` fields.
 - Skills read per-project config from `.claude/*.yaml` files — they never hard-code paths or project-specific details.
 - Trigger phrases are documented at the bottom of each SKILL.md.
-- A `RULE.md` carries **no** `name`/`description` frontmatter — the file is installed verbatim, so anything in it costs
+- A rule file carries **no** `name`/`description` frontmatter — it is installed verbatim, so anything in it costs
   context in every session. Catalog metadata lives in the README table instead. The one frontmatter key a rule may use
   is `paths:`, which scopes it to matching files.
-- Rules are written as standing instructions, not documentation about the repo. One topic per file.
+- Rules are written as standing instructions, not documentation about the repo. One topic per file, grouped into a
+  category directory.
 
 ## Adding a new skill
 
@@ -44,15 +49,16 @@ that only matters when invoked.
 
 ## Adding a new rule
 
-1. Create `rules/{rule-name}/RULE.md` — the complete block, written to be installed verbatim.
-2. Add it to the rule catalog in the README.
-3. If this repo should follow it too, copy it to `.claude/rules/{rule-name}.md`.
+1. Create `rules/{category}/{rule-name}.md` — the complete block, written to be installed verbatim. Reuse an existing
+   category directory, or add one when the topic is genuinely new.
+2. Add it to the rule catalog in the README, under its category heading.
+3. If this repo should follow it too, copy it to `.claude/rules/{category}/{rule-name}.md`.
 
 ## This repo's own rules
 
-`.claude/rules/git-etiquette.md` is a copy of `rules/git-etiquette/RULE.md`. **Keep the two in sync** — edit the
-canonical copy under `rules/`, then re-copy. This repo follows semi-linear history: branch, rebase onto `main`, merge
-with a merge commit, never squash or rebase-merge.
+`.claude/rules/git-etiquette/semi-linear-history.md` is a copy of `rules/git-etiquette/semi-linear-history.md`. **Keep
+the two in sync** — edit the canonical copy under `rules/`, then re-copy. This repo follows semi-linear history: branch,
+rebase onto `main`, merge with a merge commit, never squash or rebase-merge.
 
 ## Skill catalog
 

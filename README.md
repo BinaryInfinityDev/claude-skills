@@ -61,20 +61,29 @@ Rules are always-loaded instruction blocks — the modular form of CLAUDE.md. Dr
 context at the start of every session, at the same priority as `.claude/CLAUDE.md`. Unlike skills, they need no trigger;
 unlike a growing CLAUDE.md, each covers one topic in its own file.
 
-| Rule                                         | Description                                                                 |
-| -------------------------------------------- | --------------------------------------------------------------------------- |
-| [git-etiquette](rules/git-etiquette/RULE.md) | Semi-linear history: branch, rebase, merge-commit, and force-push etiquette |
+Rules are grouped by category: `rules/{category}/{rule-name}.md`.
 
-Install a rule by copying its `RULE.md` to `.claude/rules/{name}.md`:
+### Git Etiquette
+
+| Rule                                                              | Description                                                                                      |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [semi-linear-history](rules/git-etiquette/semi-linear-history.md) | Branch, rebase onto base, merge with a merge commit — plus commit style and force-push etiquette |
+
+## Installing a rule
+
+Copy the rule file into `.claude/rules/`. Claude Code discovers `.md` files there recursively, so keeping the category
+directory works and makes the source obvious:
 
 ```bash
-cp rules/git-etiquette/RULE.md /path/to/repo/.claude/rules/git-etiquette.md
+mkdir -p /path/to/repo/.claude/rules/git-etiquette
+cp rules/git-etiquette/semi-linear-history.md /path/to/repo/.claude/rules/git-etiquette/
 ```
 
 Or symlink it, if you want one shared copy across several repos — `.claude/rules/` resolves symlinks:
 
 ```bash
-ln -s ~/src/claude-skills/rules/git-etiquette/RULE.md /path/to/repo/.claude/rules/git-etiquette.md
+ln -s ~/src/claude-skills/rules/git-etiquette/semi-linear-history.md \
+      /path/to/repo/.claude/rules/git-etiquette/semi-linear-history.md
 ```
 
 For personal rules that apply everywhere, use `~/.claude/rules/` instead. To scope a rule to part of a repo, add a
@@ -117,12 +126,13 @@ For a skill:
 
 For a rule:
 
-1. Create `rules/{rule-name}/RULE.md` — the complete block, written to be installed verbatim, with no `name` or
-   `description` frontmatter (it would cost context in every session).
-2. Add it to the rule catalog above.
+1. Create `rules/{category}/{rule-name}.md` — the complete block, written to be installed verbatim, with no `name` or
+   `description` frontmatter (it would cost context in every session). Reuse an existing category directory, or add one
+   when the topic is genuinely new.
+2. Add it to the rule catalog above, under its category heading.
 
-Then open a PR. This repo keeps semi-linear history — see [rules/git-etiquette](rules/git-etiquette/RULE.md), which it
-follows itself.
+Then open a PR. This repo keeps semi-linear history — see
+[semi-linear-history](rules/git-etiquette/semi-linear-history.md), which it follows itself.
 
 ## License
 
