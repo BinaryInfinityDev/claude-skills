@@ -27,6 +27,7 @@ FILES = [
     ("agents/runner.md", "agents/runner.md"),
     ("agents/scout.md", "agents/scout.md"),
     ("agents/architect.md", "agents/architect.md"),
+    ("agents/senior-developer.md", "agents/senior-developer.md"),
     ("agents/devils-advocate.md", "agents/devils-advocate.md"),
     ("hooks/model_tier_guard.py", "hooks/model_tier_guard.py"),
     ("hooks/model_tier_context.py", "hooks/model_tier_context.py"),
