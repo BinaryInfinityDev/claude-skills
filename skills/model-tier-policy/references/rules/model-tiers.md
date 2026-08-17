@@ -1,14 +1,23 @@
 # Model tier policy
 
-Work is split by model tier across five roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
+Work is split by model tier across six roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
 
-| Role                 | Agent             | Model                               | Owns                                                                             |
-| -------------------- | ----------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
-| **Architect**        | `architect`       | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review    |
-| **Executor**         | `executor`        | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**            |
-| **Scout**            | `scout`           | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius     |
-| **Devil's advocate** | `devils-advocate` | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict |
-| **Runner**           | `runner`          | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage      |
+| Role                 | Agent              | Model                               | Owns                                                                                  |
+| -------------------- | ------------------ | ----------------------------------- | ------------------------------------------------------------------------------------- |
+| **Architect**        | `architect`        | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review         |
+| **Senior developer** | `senior-developer` | Fable 5 (`claude-fable-5`)          | Implementation of tricky or novel work — where design and code must be found together |
+| **Executor**         | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**                 |
+| **Scout**            | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius          |
+| **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict      |
+| **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage           |
+
+The **senior developer** is the one premium-tier role that writes code. It exists for work that cannot be reduced to a
+plan an executor could carry out: the design and the implementation are entangled, an executor already failed for a
+reason nobody has named, the change is hard to reverse, or the problem is novel enough that the plan would be guesswork
+until code exists. Unlike an executor it may **change the approach** — but not the goal; a wrong goal is a fork to
+escalate, not to fix. Reach for it deliberately and rarely: if a plan can be written, write the plan and send an
+executor. Its context is as scarce as the architect's, so it delegates its own reading to `scout` and its own mechanical
+sweeps to `runner`/`executor`.
 
 The premium tier's scarce resource is its **context**, not its time.
 
@@ -36,19 +45,28 @@ You may write plan and decision files, and spend a small orientation budget of r
 that, send a `scout`. Edits, Bash, git, and workflows are denied — the denial message tells you how to re-issue as a
 delegation.
 
-Spawning subagents: always pin a non-premium `model`. A subagent's model defaults to `inherit`, so an unpinned agent
-spawned from a Fable session runs _on Fable_.
+Spawning subagents: **always pin the `model` explicitly.** A subagent's model defaults to `inherit`, so an unpinned
+agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin a
+non-premium model for every role except `senior-developer`, which is pinned `fable` on purpose.
 
 ## When the session model is Opus or Sonnet
 
-Do the work yourself. Escalate to the `architect` agent (`model: fable`) only at a real fork: an architectural choice
-with lasting consequences, a design you cannot converge on, or a repeated failure whose cause you cannot name.
+Do the work yourself. There are two escalations, and they answer different questions:
+
+- **`architect`** (`model: fable`) — at a real fork: an architectural choice with lasting consequences, a design you
+  cannot converge on, or a repeated failure whose cause you cannot name. It returns a **decision**, not code.
+- **`senior-developer`** (`model: fable`) — when the work itself is beyond this tier: the design and the code have to be
+  found together, the change is hard to reverse, or you have already failed at it and cannot name why. It returns
+  **working code plus the judgment calls behind it**.
+
+The test between them: if you could act on a decision once you had it, escalate to `architect`. If you would still be
+stuck holding the decision, escalate to `senior-developer`.
 
 Escalation briefs are distilled — the question, options already ruled out and why, constraints, the decision needed.
-Under 40 lines, no source dumps. It returns a decision, not an implementation.
+Under 40 lines, no source dumps.
 
 Do not escalate something you could resolve by reading code, routine design with an obvious convention, or work that is
-merely tedious.
+merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runner`, however long it is.
 
 ## Frugality rules
 

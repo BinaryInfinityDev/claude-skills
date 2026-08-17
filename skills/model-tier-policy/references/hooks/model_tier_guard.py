@@ -29,6 +29,7 @@ DEFAULTS = {
     "runner_agent": "runner",
     "scout_agent": "scout",
     "architect_agent": "architect",
+    "senior_agent": "senior-developer",
     "advocate_agent": "devils-advocate",
     "write_allowed": [
         ".claude/plans/**",
@@ -212,8 +213,15 @@ def bump_read_count(session_key, turn_key, call_key):
     return state["count"]
 
 
-def agent_pins_model(root, agent_type, premium):
-    """True when the named agent definition pins a non-premium model.
+def agent_pins_model(root, agent_type):
+    """True when the named agent definition pins a model of its own — premium or not.
+
+    The hazard this guard exists for is *accidental* inheritance: an unpinned spawn silently running on the premium
+    tier because `model` defaults to `inherit`. An agent file that names its own model cannot inherit, so it is not
+    that hazard, and that holds whether the pin is cheap or premium. A premium pin in an agent definition is the same
+    kind of deliberate escalation as passing `model="fable"` at the call site, which the caller above already allows —
+    `senior-developer` is exactly that, and rejecting it would send the caller to the executor tier for work the role
+    exists to take off it.
 
     `agent_type` comes from tool input and is interpolated into a path, so it is restricted to a bare filename here —
     otherwise a name like `../../some/other` would read a file outside the agents directory and take its `model:` line
@@ -233,7 +241,7 @@ def agent_pins_model(root, agent_type, premium):
         if not match:
             return False
         value = match.group(1).strip()
-        return value != "inherit" and not premium.search(value)
+        return value != "inherit"
     return False
 
 
@@ -252,14 +260,21 @@ def check_agent_call(cfg, root, tool_input, premium):
             "Model tier policy: `%s` always inherits the parent model, so this would run on the premium tier.\n"
             "Use the `%s` agent instead, or pass model: \"opus\"." % (agent_type, cfg["executor_agent"])
         )
-    if agent_type and agent_pins_model(root, agent_type, premium):
+    if agent_type and agent_pins_model(root, agent_type):
         return None
     return (
         "Model tier policy: a subagent's model defaults to `inherit`, so this spawn would run on the premium tier —\n"
         "the most expensive possible way to do procedural work.\n"
         "Re-issue with the model pinned: Agent(subagent_type=\"%s\", model=\"opus\", prompt=...)\n"
-        "Agents available: %s (Opus, implementation), %s (Sonnet, bulk mechanical), %s (Opus, read-only research)."
-        % (cfg["executor_agent"], cfg["executor_agent"], cfg["runner_agent"], cfg["scout_agent"])
+        "Agents available: %s (Opus, implementation), %s (Sonnet, bulk mechanical), %s (Opus, read-only research).\n"
+        "For work that genuinely needs the premium tier to write the code, `%s` pins Fable itself."
+        % (
+            cfg["executor_agent"],
+            cfg["executor_agent"],
+            cfg["runner_agent"],
+            cfg["scout_agent"],
+            cfg["senior_agent"],
+        )
     )
 
 

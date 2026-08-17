@@ -7,6 +7,7 @@
   "runner_agent": "runner",
   "scout_agent": "scout",
   "architect_agent": "architect",
+  "senior_agent": "senior-developer",
   "advocate_agent": "devils-advocate",
   "write_allowed": [
     ".claude/plans/**",
