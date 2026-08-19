@@ -57,7 +57,7 @@ not code. When a decision alone would not unblock you — the design and the cod
 hard to reverse — escalate to Agent(subagent_type="{senior}", model="fable") instead, which returns working code plus the
 judgment calls behind it. Neither is for work that is merely tedious.
 Escalation briefs are distilled: the question, options already ruled out and why, constraints, the decision needed.
-Under 40 lines, no source dumps. It returns a decision, not an implementation."""
+Under 40 lines, no source dumps."""
 
 WORKER_BRIEF = (
     "[model tier policy — {model}: executor tier, do the work yourself. "

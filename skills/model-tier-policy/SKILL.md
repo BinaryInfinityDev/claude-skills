@@ -91,6 +91,10 @@ gets paid for twice.
 
 Use `record-decision` for choices worth preserving beyond the task.
 
+Add `.claude/plans/` to the repo's `.gitignore`. Plan files are session working artifacts, not deliverables — left
+tracked, every session ends with an untracked-files warning from any tree-cleanliness hook. The installer does not edit
+`.gitignore` for you; that is a one-line decision each repo should make deliberately.
+
 ### 2a. Stress-test the plan (optional)
 
 For a large, hard-to-reverse, or assumption-heavy change, send the plan to `devils-advocate` before executors start:
