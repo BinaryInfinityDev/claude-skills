@@ -11,13 +11,9 @@ Work is split by model tier across six roles. This is a hard rule, enforced by `
 | **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict      |
 | **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work: repetitive edits, formatting, boilerplate, log triage           |
 
-The **senior developer** is the one premium-tier role that writes code. It exists for work that cannot be reduced to a
-plan an executor could carry out: the design and the implementation are entangled, an executor already failed for a
-reason nobody has named, the change is hard to reverse, or the problem is novel enough that the plan would be guesswork
-until code exists. Unlike an executor it may **change the approach** — but not the goal; a wrong goal is a fork to
-escalate, not to fix. Reach for it deliberately and rarely: if a plan can be written, write the plan and send an
-executor. Its context is as scarce as the architect's, so it delegates its own reading to `scout` and its own mechanical
-sweeps to `runner`/`executor`.
+The **senior developer** is the one premium-tier role that writes code — for work that cannot be reduced to a plan an
+executor could carry out. It may change the approach but not the goal, and it delegates its own reading to `scout` and
+its own mechanical sweeps to `runner`/`executor`. If a plan can be written, write the plan and send an executor.
 
 The premium tier's scarce resource is its **context**, not its time.
 

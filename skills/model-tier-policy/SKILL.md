@@ -187,10 +187,10 @@ obvious convention to follow, or work that is just tedious.
 the files under `references/` are inert wherever the skill lives. Enforcement comes from `install.py`, which copies
 those files to the paths Claude Code actually reads. Both steps are useful and they are independent:
 
-| Step                                                                         | Gives you                                                              |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Copy `skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement              |
-| Run `install.py --target <repo>`                                             | The rules file, the four agents, and the two hooks — the actual policy |
+| Step                                                                         | Gives you                                                             |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Copy `skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement             |
+| Run `install.py --target <repo>`                                             | The rules file, the six agents, and the two hooks — the actual policy |
 
 Having the skill at user level and the policy installed per repo is the expected setup: the skill copy creates nothing
 under `~/.claude/agents/`, `~/.claude/hooks/`, `~/.claude/rules/`, or `~/.claude/settings.json`, so there is exactly one
