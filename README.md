@@ -79,7 +79,7 @@ without the enforcement.
 | [executor](agents/model-tier/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
 | [scout](agents/model-tier/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
 | [devils-advocate](agents/model-tier/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
-| [runner](agents/model-tier/runner.md)                     | Sonnet 5  | Bulk mechanical work: repetitive edits, formatting, log triage                     |
+| [runner](agents/model-tier/runner.md)                     | Sonnet 5  | Bulk mechanical work and build/test runs — failure logs go to build-analyst        |
 | [build-analyst](agents/model-tier/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
 
 ## Installing an agent
