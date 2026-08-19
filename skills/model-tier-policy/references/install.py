@@ -19,18 +19,23 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# The agent definitions are not skill-private: they live in the repo-level catalog so other skills can cite them.
+AGENTS_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "agents", "model-tier"))
 
 # (source relative to references/, destination relative to .claude/)
 FILES = [
     ("rules/model-tiers.md", "rules/model-tiers.md"),
-    ("agents/executor.md", "agents/executor.md"),
-    ("agents/runner.md", "agents/runner.md"),
-    ("agents/scout.md", "agents/scout.md"),
-    ("agents/architect.md", "agents/architect.md"),
-    ("agents/senior-developer.md", "agents/senior-developer.md"),
-    ("agents/devils-advocate.md", "agents/devils-advocate.md"),
     ("hooks/model_tier_guard.py", "hooks/model_tier_guard.py"),
     ("hooks/model_tier_context.py", "hooks/model_tier_context.py"),
+]
+# (source relative to AGENTS_SRC, destination relative to .claude/)
+AGENT_FILES = [
+    ("executor.md", "agents/executor.md"),
+    ("runner.md", "agents/runner.md"),
+    ("scout.md", "agents/scout.md"),
+    ("architect.md", "agents/architect.md"),
+    ("senior-developer.md", "agents/senior-developer.md"),
+    ("devils-advocate.md", "agents/devils-advocate.md"),
 ]
 CONFIG = ("model-tiers.json", "model-tiers.json")
 
@@ -99,13 +104,20 @@ def main():
             % os.path.join(other, ".claude")
         )
 
+    if not os.path.isdir(AGENTS_SRC):
+        sys.exit(
+            "error: agent sources not found at %s — run install.py from a full claude-skills checkout "
+            "(the skill directory alone does not carry the agents)" % AGENTS_SRC
+        )
+
     plan = []
-    for src, dest in FILES + [CONFIG]:
-        src_path = os.path.join(HERE, src)
+    sources = [(os.path.join(HERE, src), dest) for src, dest in FILES + [CONFIG]]
+    sources += [(os.path.join(AGENTS_SRC, src), dest) for src, dest in AGENT_FILES]
+    for src_path, dest in sources:
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):
             sys.exit("error: missing source file %s" % src_path)
-        if (src, dest) == CONFIG and os.path.exists(dest_path) and not args.force:
+        if dest == CONFIG[1] and os.path.exists(dest_path) and not args.force:
             plan.append(("keep", dest_path))
             continue
         verb = "update" if os.path.exists(dest_path) else "create"

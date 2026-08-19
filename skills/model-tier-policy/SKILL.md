@@ -208,6 +208,10 @@ Run from the repo you want the policy active in:
 python3 /path/to/claude-skills/skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
+Run it from a full `claude-skills` checkout. The six agent definitions live in the repo's top-level `agents/model-tier/`
+catalog rather than inside the skill, so a lone copy of `skills/model-tier-policy/` has nothing to install them from —
+the installer says so and exits rather than writing a half-installed policy.
+
 The installer is idempotent and reports what it changed. It writes:
 
 | File                                  | Role                                                                                 |
