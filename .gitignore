@@ -4,3 +4,6 @@ claude-skills.iml
 node_modules/
 __pycache__/
 *.pyc
+
+# Session working artifacts (model-tier-policy plan files)
+.claude/plans/
