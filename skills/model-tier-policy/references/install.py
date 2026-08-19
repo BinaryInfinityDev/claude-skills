@@ -30,6 +30,7 @@ FILES = [
 ]
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [
+    ("build-analyst.md", "agents/build-analyst.md"),
     ("executor.md", "agents/executor.md"),
     ("runner.md", "agents/runner.md"),
     ("scout.md", "agents/scout.md"),

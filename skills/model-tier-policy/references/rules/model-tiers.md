@@ -72,6 +72,8 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 4. Delegate wide, not deep — independent tasks go out as parallel executors in a single message.
 5. Cap every return.
 6. Don't escalate a question a scout can answer.
+7. A failed build is diagnosed from its log: hand `build-analyst` the log path — do not re-run to re-see output, and
+   never paste a log into premium context.
 
 ## Escape hatch
 
