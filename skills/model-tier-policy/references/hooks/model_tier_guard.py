@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """PreToolUse guard for the model tier policy.
 
-Denies procedural tool calls when the *main loop* is running on the premium tier (Fable), and tells the model exactly
-how to re-issue the call as a delegation to a lower tier.
+Denies procedural tool calls when the *main loop* is running on the premium tier (Fable) — or, with orchestrator mode
+marked on, when the session runs as the orchestrator on any tier — and tells the model exactly how to re-issue the
+call as a delegation.
 
 Design notes:
   - There is no $CLAUDE_MODEL env var and hook input does not carry the model, so the live model is read from the
@@ -25,6 +26,9 @@ DEFAULTS = {
     "premium_model_pattern": "fable",
     "read_budget": 8,
     "reminder_interval": 10,  # consumed by model_tier_context.py, which shares this loader
+    "orchestrator_mode": False,
+    # Tools the orchestrator may use even though they mutate external state: tickets are its work product.
+    "orchestrator_tools_allowed": [r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"],
     "executor_agent": "executor",
     "runner_agent": "runner",
     "scout_agent": "scout",
@@ -159,6 +163,21 @@ def live_model(transcript_path):
     except Exception:
         return None
     return None
+
+
+def orchestrator_active(cfg):
+    """True when this session's main loop is declared to run as the orchestrator.
+
+    The marker is deliberate configuration, not inference — the guard cannot tell an Opus orchestrator session from an
+    Opus executor session by model alone. A repo whose primary sessions coordinate sets "orchestrator_mode": true in
+    its config; MODEL_TIER_ORCHESTRATOR=on|off flips a single session either way and wins over the config.
+    """
+    env = os.environ.get("MODEL_TIER_ORCHESTRATOR", "").lower()
+    if env in ("on", "1", "true"):
+        return True
+    if env in ("off", "0", "false"):
+        return False
+    return bool(cfg.get("orchestrator_mode"))
 
 
 def matches_any(patterns, value):
@@ -311,8 +330,18 @@ def main():
         allow()
 
     model = live_model(payload.get("transcript_path"))
-    if not model or not premium.search(model):
-        allow()  # fail open: unknown or non-premium tier
+    is_premium = bool(model) and bool(premium.search(model))
+    as_orchestrator = bool(model) and not is_premium and orchestrator_active(cfg)
+    if not is_premium and not as_orchestrator:
+        allow()  # fail open: unknown model, or a worker tier with no orchestrator marker
+
+    # One denial machinery serves two postures. What differs is why: the premium tier is kept off procedural work to
+    # protect its context budget; an orchestrator session is kept off it because coordination is its whole job.
+    role = (
+        "on the premium tier (%s), which plans but does not implement" % model
+        if is_premium
+        else "running as the orchestrator, which coordinates but does not implement"
+    )
 
     tool = payload.get("tool_name") or ""
     tool_input = payload.get("tool_input") or {}
@@ -322,10 +351,16 @@ def main():
     )
 
     if tool == "Agent":
-        reason = check_agent_call(cfg, root, tool_input, premium)
-        if reason:
-            deny(reason)
+        # Orchestrator spawns are never gated: inheritance lands on the worker tier it already runs on, and an
+        # explicit premium pin is the same deliberate escalation it is for everyone else.
+        if is_premium:
+            reason = check_agent_call(cfg, root, tool_input, premium)
+            if reason:
+                deny(reason)
         allow()
+
+    if as_orchestrator and matches_any(cfg["orchestrator_tools_allowed"], tool):
+        allow()  # tickets are the orchestrator's work product, not procedural drift
 
     if matches_any(cfg["procedural_tools_denied"], tool):
         if tool in WRITE_TOOLS:
@@ -333,10 +368,9 @@ def main():
             if path_allowed(root, target, cfg["write_allowed"]):
                 allow()
             deny(
-                "Model tier policy: %s is procedural and you are on the premium tier (%s), which plans but does not "
-                "implement.\n%s\nYou may write plan and decision files directly (%s) — put the plan on disk and hand "
-                "the executor its path."
-                % (tool, model, delegate_hint, ", ".join(cfg["write_allowed"]))
+                "Model tier policy: %s is procedural and you are %s.\n%s\nYou may write plan and decision files "
+                "directly (%s) — put the plan on disk and hand the executor its path."
+                % (tool, role, delegate_hint, ", ".join(cfg["write_allowed"]))
             )
 
         if tool in ("Bash", "BashOutput", "KillShell"):
@@ -344,21 +378,32 @@ def main():
             if command and matches_any(cfg["bash_allowed"], command):
                 allow()
             deny(
-                "Model tier policy: shell commands are procedural and you are on the premium tier (%s).\n%s\n"
+                "Model tier policy: shell commands are procedural and you are %s.\n%s\n"
                 "The executor runs the command and reports the outcome — you do not need the transcript in context."
-                % (model, delegate_hint)
+                % (role, delegate_hint)
             )
 
         if tool == "Workflow":
+            if is_premium:
+                deny(
+                    "Model tier policy: workflow agents inherit the main-loop model, so this would run the whole "
+                    "fan-out on the premium tier (%s).\nDelegate the orchestration instead: "
+                    "Agent(subagent_type=\"%s\", model=\"opus\", prompt=<the workflow goal and plan file path>)."
+                    % (model, cfg["executor_agent"])
+                )
             deny(
-                "Model tier policy: workflow agents inherit the main-loop model, so this would run the whole fan-out "
-                "on the premium tier (%s).\nDelegate the orchestration instead: Agent(subagent_type=\"%s\", "
-                "model=\"opus\", prompt=<the workflow goal and plan file path>)." % (model, cfg["executor_agent"])
+                "Model tier policy: you are running as the orchestrator — orchestration happens by dispatching "
+                "agents with pinned models, not by running workflows.\nDelegate: Agent(subagent_type=\"%s\", "
+                "model=\"opus\", prompt=<the goal and plan file path>)." % cfg["executor_agent"]
             )
 
+        extra = (
+            ""
+            if is_premium
+            else "\nTicket tools the orchestrator owns are allowed via orchestrator_tools_allowed in the config."
+        )
         deny(
-            "Model tier policy: %s mutates external state and you are on the premium tier (%s), which plans but does "
-            "not execute.\n%s" % (tool, model, delegate_hint)
+            "Model tier policy: %s mutates external state and you are %s.\n%s%s" % (tool, role, delegate_hint, extra)
         )
 
     budget = int(cfg.get("read_budget") or 0)
@@ -367,12 +412,17 @@ def main():
         turn_key = payload.get("prompt_id") or session_key
         count = bump_read_count(session_key, turn_key, payload.get("tool_use_id"))
         if count > budget:
+            scarcity = (
+                "Premium context is the scarce resource — raw file contents do not belong in it."
+                if is_premium
+                else "The orchestrator's context is its longevity — plans and tickets belong in it, file contents "
+                "do not."
+            )
             deny(
-                "Model tier policy: orientation budget spent (%d/%d reads this turn) on the premium tier (%s). "
-                "Premium context is the scarce resource — raw file contents do not belong in it.\n"
+                "Model tier policy: orientation budget spent (%d/%d reads this turn) and you are %s. %s\n"
                 "Send a scout instead: Agent(subagent_type=\"%s\", model=\"opus\", prompt=<the question, the paths to "
                 "search, and 'return findings only — no file contents, max 15 lines'>)."
-                % (count, budget, model, cfg["scout_agent"])
+                % (count, budget, role, scarcity, cfg["scout_agent"])
             )
 
     allow()

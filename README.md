@@ -34,17 +34,18 @@ folded into a consolidated CSV and the tracking branch cleared.
 
 ### Model Budget
 
-| Skill                                                  | Description                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------ |
-| [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 (or Sonnet 5) does the procedural work |
+| Skill                                                  | Description                                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| [model-tier-policy](skills/model-tier-policy/SKILL.md) | An Opus 5 orchestrator coordinates; Fable 5 plans and reviews; Opus 5 / Sonnet 5 do the procedural work |
 
-Six roles, each pinned to a model: `architect` (Fable 5) frames and decides, `senior-developer` (Fable 5) implements the
-rare change too entangled to hand off as a plan, `executor` (Opus 5) implements, `scout` (Opus 5, read-only)
-investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only) optionally
-stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work. Two specialists sit
-beside them: `build-runner` (Sonnet 5) proves a ref in an isolated git worktree — one build at a time, lock-enforced,
-timed against a ledger — and `build-analyst` (Haiku 4.5) triages failed-build logs from a path instead of re-running the
-build.
+Seven roles, each pinned to a model: `orchestrator` (Opus 5) holds the session's main loop in the recommended topology
+and coordinates — tickets, plans, dispatch, never implementation; `architect` (Fable 5) frames and decides;
+`senior-developer` (Fable 5) implements the rare change too entangled to hand off as a plan; `executor` (Opus 5)
+implements; `scout` (Opus 5, read-only) investigates and returns findings instead of file contents; `devils-advocate`
+(Opus 5, read-only) optionally stress-tests a plan before anyone builds it; and `runner` (Sonnet 5) handles bulk
+mechanical work. Two specialists sit beside them: `build-runner` (Sonnet 5) proves a ref in an isolated git worktree —
+one build at a time, lock-enforced, timed against a ledger — and `build-analyst` (Haiku 4.5) triages failed-build logs
+from a path instead of re-running the build.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
@@ -70,12 +71,13 @@ Agents are grouped by category: `agents/{category}/{agent-name}.md`.
 
 ### Model Tier Policy
 
-The six roles of the [model-tier-policy](skills/model-tier-policy/SKILL.md) skill, plus the specialists that ship
-alongside them. Its installer writes these into a target repo for you; copy them by hand only if you want the roles
-without the enforcement.
+The roles of the [model-tier-policy](skills/model-tier-policy/SKILL.md) skill, plus the specialists that ship alongside
+them. Its installer writes these into a target repo for you; copy them by hand only if you want the roles without the
+enforcement.
 
 | Agent                                                            | Model     | Description                                                                        |
 | ---------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------- |
+| [orchestrator](agents/model-tier-policy/orchestrator.md)         | Opus 5    | Coordinates the team from the main loop — tickets, plans, dispatch; never works    |
 | [architect](agents/model-tier-policy/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
 | [senior-developer](agents/model-tier-policy/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
 | [executor](agents/model-tier-policy/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |

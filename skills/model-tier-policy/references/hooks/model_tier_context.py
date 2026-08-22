@@ -21,7 +21,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import load_config, live_model, project_dir
+    from model_tier_guard import load_config, live_model, orchestrator_active, project_dir
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -47,6 +47,22 @@ PREMIUM_BRIEF = (
     "[model tier policy — {model} (premium): plan and delegate; procedural tools are hook-denied. "
     'Delegate with Agent(subagent_type="{executor}", model="opus", ...) and cap every return. '
     "Full policy: .claude/rules/model-tier-policy.md]"
+)
+
+ORCHESTRATOR = """[model tier policy — orchestrator session ({model})]
+You coordinate; you do not implement. Your surface is tickets, plans, dispatch, tracking, and status — nothing else.
+- Decompose work into tickets (GitHub issues) and plan files (`.claude/plans/<slug>.plan.md`); the plan file is the
+  contract you hand out.
+- Dispatch with pinned models: "{executor}" (Opus) implements, "{senior}" (Fable) for entangled work, "{scout}" (Opus,
+  read-only) investigates, "{runner}" (Sonnet) sweeps, "build-runner" (Sonnet) proves refs one at a time,
+  "{architect}" (Fable) decides. Cap every return.
+- Read tickets and plans, never source or logs. Your scarce resource is longevity: a coordinator that hoards context
+  dies of compaction mid-project.
+Edits, shell, and workflows are denied by hook; ticket writes are allowed. The denial tells you how to delegate."""
+
+ORCHESTRATOR_BRIEF = (
+    "[model tier policy — orchestrator session ({model}): coordinate and dispatch; procedural tools are hook-denied, "
+    "ticket writes allowed. Full policy: .claude/rules/model-tier-policy.md]"
 )
 
 WORKER = """[model tier policy — active tier: {model}]
@@ -141,6 +157,16 @@ def main():
             scout=cfg["scout_agent"],
             senior=cfg["senior_agent"],
             budget=cfg.get("read_budget", 8),
+        )
+    elif orchestrator_active(cfg):
+        template = ORCHESTRATOR if full else ORCHESTRATOR_BRIEF
+        context = template.format(
+            model=model,
+            executor=cfg["executor_agent"],
+            runner=cfg["runner_agent"],
+            scout=cfg["scout_agent"],
+            senior=cfg["senior_agent"],
+            architect=cfg["architect_agent"],
         )
     else:
         template = WORKER if full else WORKER_BRIEF

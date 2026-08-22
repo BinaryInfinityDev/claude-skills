@@ -1,9 +1,10 @@
 # Model tier policy
 
-Work is split by model tier across six roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
+Work is split by model tier across seven roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
 
 | Role                 | Agent              | Model                               | Owns                                                                                                |
 | -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Orchestrator**     | `orchestrator`     | Opus 5 (`claude-opus-5`)            | Coordination: tickets, plans, decomposition, dispatch, status — never implementation                |
 | **Architect**        | `architect`        | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review                       |
 | **Senior developer** | `senior-developer` | Fable 5 (`claude-fable-5`)          | Implementation of tricky or novel work — where design and code must be found together               |
 | **Executor**         | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**                               |
@@ -44,6 +45,15 @@ delegation.
 Spawning subagents: **always pin the `model` explicitly.** A subagent's model defaults to `inherit`, so an unpinned
 agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin a
 non-premium model for every role except `senior-developer`, which is pinned `fable` on purpose.
+
+## When the session runs as the orchestrator
+
+Marked by `"orchestrator_mode": true` in `.claude/model-tier-policy.json`, or `MODEL_TIER_ORCHESTRATOR=on` for one
+session. Coordinate, never implement: decompose work into tickets (GitHub issues) and plan files, dispatch each task to
+the role that owns it with the model pinned, track what is in flight, report status. Read tickets and plans — never
+source or logs: a question about the code is a `scout` brief, a build is `build-runner`'s. Ask `architect` for decisions
+rather than making them, and cap every return. Procedural tools are hook-denied as on the premium tier; ticket writes
+are allowed.
 
 ## When the session model is Opus or Sonnet
 

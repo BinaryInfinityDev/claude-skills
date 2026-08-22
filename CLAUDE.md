@@ -83,16 +83,16 @@ rebase onto `main`, merge with a merge commit, never squash or rebase-merge.
 
 ## Skill catalog
 
-| Skill                                                  | Description                                                                         |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| [start-session](skills/start-session/SKILL.md)         | Start or resume a git session branch                                                |
-| [end-session](skills/end-session/SKILL.md)             | Finalize a session branch — summary, finalize hook, merge                           |
-| [ingest-artifact](skills/ingest-artifact/SKILL.md)     | Ingest raw data into a project's artifact store                                     |
-| [record-decision](skills/record-decision/SKILL.md)     | Record a numbered architecture/design decision                                      |
-| [arda-end-session](skills/arda-end-session/SKILL.md)   | Project-specific session finalization for Arda Net (reference implementation)       |
-| [session-timelog](skills/session-timelog/SKILL.md)     | Record a session's own usage as a content-free timeline on a tracking branch        |
-| [time-report](skills/time-report/SKILL.md)             | Build a time report + timesheet from timelines, commits, and PRs/issues             |
-| [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 / Sonnet 5 do the procedural work — hook-enforced |
+| Skill                                                  | Description                                                                                  |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [start-session](skills/start-session/SKILL.md)         | Start or resume a git session branch                                                         |
+| [end-session](skills/end-session/SKILL.md)             | Finalize a session branch — summary, finalize hook, merge                                    |
+| [ingest-artifact](skills/ingest-artifact/SKILL.md)     | Ingest raw data into a project's artifact store                                              |
+| [record-decision](skills/record-decision/SKILL.md)     | Record a numbered architecture/design decision                                               |
+| [arda-end-session](skills/arda-end-session/SKILL.md)   | Project-specific session finalization for Arda Net (reference implementation)                |
+| [session-timelog](skills/session-timelog/SKILL.md)     | Record a session's own usage as a content-free timeline on a tracking branch                 |
+| [time-report](skills/time-report/SKILL.md)             | Build a time report + timesheet from timelines, commits, and PRs/issues                      |
+| [model-tier-policy](skills/model-tier-policy/SKILL.md) | An Opus 5 orchestrator coordinates; Fable 5 plans; Opus 5 / Sonnet 5 execute — hook-enforced |
 
 ## Installing a skill
 

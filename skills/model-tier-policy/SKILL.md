@@ -1,9 +1,10 @@
 ---
 name: model-tier-policy
 description:
-  Split work across model tiers — Fable 5 does the thinking and planning, Opus 5 (or Sonnet 5) does everything
-  procedural. Use when setting up or operating a session that must be frugal with premium-model usage limits, when the
-  user says "Fable plans, Opus executes", or invokes /model-tier-policy.
+  Split work across model tiers — an Opus 5 orchestrator session coordinates a team of pinned-model agents; Fable 5 does
+  the thinking and planning; Opus 5 (or Sonnet 5) does everything procedural. Use when setting up or operating a session
+  that must be frugal with premium-model usage limits, when the user says "Fable plans, Opus executes", asks for an
+  orchestrator session, or invokes /model-tier-policy.
 source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/model-tier-policy/SKILL.md
 ---
 
@@ -25,17 +26,23 @@ that enforce the split mechanically so the working model cannot quietly drift ba
 
 ## The roles
 
-Six roles, each pinned to a model. Five ship as subagents the architect delegates to; the architect is whoever holds the
-premium session.
+Seven roles, each pinned to a model. Whoever holds the session's main loop coordinates — the orchestrator (Opus) in the
+recommended topology, or the architect (Fable) in a premium-led session; the rest ship as subagents to delegate to.
 
 | Role                       | Agent              | Model                               | Owns                                                                                                                |
 | -------------------------- | ------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Orchestrator** (coord.)  | `orchestrator`     | Opus 5 (`claude-opus-5`)            | Tickets, plans, decomposition, dispatch, tracking, status — never implementation                                    |
 | **Architect** (premium)    | `architect`        | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review                    |
 | **Senior developer**       | `senior-developer` | Fable 5 (`claude-fable-5`)          | Tricky or novel implementation where design and code must be found together                                         |
 | **Executor** (default)     | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation: edits, refactors, tests, builds, git, debugging                                                 |
 | **Scout** (research)       | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how something works, where it lives, why it breaks, what the blast radius is                         |
 | **Devil's advocate** (opt) | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Adversarial review of a plan before it is built: ranked objections and a verdict                                    |
 | **Runner** (bulk)          | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | High-volume mechanical work — repetitive renames, formatting sweeps, boilerplate; heavy builds go to `build-runner` |
+
+**The orchestrator coordinates and owns nothing else.** Tickets and plan files are its work product; everything below
+them is dispatched. It never edits, builds, reads source, or reads logs — and it does not make architecture calls, it
+asks `architect` for them. Its scarce resource is longevity: a coordinator that hoards context dies of compaction
+mid-project, so it holds ticket state, plan paths, and capped returns, nothing more.
 
 **Opus is the default worker.** Reach for Sonnet only when the task is genuinely mechanical and voluminous enough that
 the tier difference matters. When unsure between Opus and Sonnet, pick Opus.
@@ -83,6 +90,39 @@ with the plan in hand would produce essentially the same result, it is procedura
 
 Non-procedural = the parts where a different engineer would reasonably produce a different answer: what to build, which
 approach, what the interface should be, whether the result is acceptable, what to do about a surprise.
+
+---
+
+## Topologies: who holds the main loop
+
+The main loop pays for **every** turn — check-ins, tool results, chatter — so which model holds it is the biggest cost
+decision the policy makes.
+
+**Opus-led orchestrator session — the recommended default.**
+
+```
+Opus session (orchestrator) ──delegates──> fable   (architect / senior-developer — rare: decisions, entangled work)
+                                           opus    (executor / scout / devils-advocate)
+                                           sonnet  (runner / build-runner)
+                                           haiku   (build-analyst)
+```
+
+The session runs on Opus and holds the `orchestrator` role: tickets, plans, dispatch, tracking, status — never
+implementation. Fable is invoked only as a subagent, only at the moments premium judgement is needed. This is strictly
+more frugal than a Fable-led session: the per-turn overhead lands on Opus, and premium tokens buy decisions only.
+
+Mark the session so the guard enforces the role: set `"orchestrator_mode": true` in `.claude/model-tier-policy.json` for
+a repo whose primary sessions coordinate, or `MODEL_TIER_ORCHESTRATOR=on` in the environment for a single session (`off`
+wins the other way when the config says true). The guard then denies edits, shell, and workflows exactly as it does for
+Fable — with ticket writes exempted via `orchestrator_tools_allowed` — and the reminder hook injects the orchestrator
+protocol instead of the worker one.
+
+**Fable-led architect session — the alternative.** The original shape: the premium model holds the session, plans, and
+delegates everything procedural downward. Right when the work is one hard design problem more than a project to
+coordinate. Its protocol is the next section.
+
+A session that is neither premium nor marked as orchestrator is a plain worker session — see
+[Working the other direction](#working-the-other-direction-opus-led).
 
 ---
 
@@ -240,6 +280,7 @@ The installer is idempotent and reports what it changed. It writes:
 | `.claude/rules/model-tier-policy.md`                | Always-loaded rules — in context every session, survives compaction                  |
 | `.claude/rules/build-discipline/worktree-builds.md` | Always-loaded — builds in worktrees beside development, pushes gated on green        |
 | `.claude/agents/executor.md`                        | Opus, full tools — the default worker                                                |
+| `.claude/agents/orchestrator.md`                    | Opus, coordination tools only — tickets, plans, dispatch; never implementation       |
 | `.claude/agents/runner.md`                          | Sonnet, full tools — bulk mechanical work                                            |
 | `.claude/agents/scout.md`                           | Opus, read-only — investigation that returns findings, not dumps                     |
 | `.claude/agents/architect.md`                       | Fable, read-only — for Opus-led sessions escalating a decision                       |
@@ -317,6 +358,12 @@ than a retry loop.
 | Mutating MCP tools (e.g. GitHub writes)     | Denied                                                                                                                    |
 | Everything else                             | Allowed                                                                                                                   |
 
+**Orchestrator mode reuses this table.** When the session is marked as the orchestrator (`orchestrator_mode` /
+`MODEL_TIER_ORCHESTRATOR=on`) and the main loop is not premium, the same denials apply with two differences: tools
+matching `orchestrator_tools_allowed` — GitHub issue writes by default — are allowed, because tickets are the
+orchestrator's work product; and `Agent` spawns are not gated at all, because inheritance lands on the worker tier the
+session already runs on while an explicit premium pin stays the same deliberate escalation it is for everyone else.
+
 **The `Agent` check matters more than it looks.** A subagent's model defaults to `inherit`, so a Fable session that
 spawns a general-purpose agent runs that agent _on Fable_ — the most expensive possible way to grep. The guard accepts
 an `Agent` call only when the model is pinned: an explicit non-premium `model` parameter, or a `subagent_type` whose
@@ -336,21 +383,23 @@ sanction writes anywhere on the filesystem. An absolute glob will therefore neve
 `.claude/model-tier-policy.json` (the hooks are dependency-free and read JSON; `.claude/model-tier-policy.yaml` is also
 read when PyYAML happens to be installed).
 
-| Key                       | Default                                                                                         | Purpose                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `enabled`                 | `true`                                                                                          | Master switch — `false` disables both hooks entirely                        |
-| `premium_model_pattern`   | `"fable"`                                                                                       | Case-insensitive regex matched against the live model ID                    |
-| `read_budget`             | `8`                                                                                             | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
-| `reminder_interval`       | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
-| `write_allowed`           | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Repo-relative globs the premium tier may write (see below)                  |
-| `bash_allowed`            | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
-| `procedural_tools_denied` | (see `references/model-tier-policy.json`)                                                       | Regexes for tool names denied on the premium tier                           |
-| `research_tools_allowed`  | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
-| `executor_agent`          | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
-| `runner_agent`            | `"runner"`                                                                                      | Bulk-work agent name                                                        |
-| `scout_agent`             | `"scout"`                                                                                       | Read-only investigation agent name                                          |
-| `senior_agent`            | `"senior-developer"`                                                                            | Premium implementation agent name                                           |
-| `advocate_agent`          | `"devils-advocate"`                                                                             | Optional plan-review agent name                                             |
+| Key                          | Default                                                                                         | Purpose                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `enabled`                    | `true`                                                                                          | Master switch — `false` disables both hooks entirely                        |
+| `premium_model_pattern`      | `"fable"`                                                                                       | Case-insensitive regex matched against the live model ID                    |
+| `read_budget`                | `8`                                                                                             | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
+| `reminder_interval`          | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
+| `orchestrator_mode`          | `false`                                                                                         | Treat non-premium main-loop sessions as the orchestrator (see Topologies)   |
+| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`                          | Regexes for mutating tools the orchestrator may still use (tickets)         |
+| `write_allowed`              | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Repo-relative globs the premium tier may write (see below)                  |
+| `bash_allowed`               | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
+| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                                       | Regexes for tool names denied on the premium tier                           |
+| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
+| `executor_agent`             | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
+| `runner_agent`               | `"runner"`                                                                                      | Bulk-work agent name                                                        |
+| `scout_agent`                | `"scout"`                                                                                       | Read-only investigation agent name                                          |
+| `senior_agent`               | `"senior-developer"`                                                                            | Premium implementation agent name                                           |
+| `advocate_agent`             | `"devils-advocate"`                                                                             | Optional plan-review agent name                                             |
 
 ### Escape hatch
 
@@ -384,6 +433,7 @@ escape hatch — do not silently work around it, and do not argue past their ans
 Invoke this skill when:
 
 - User says "Fable plans, Opus executes", "keep Fable off the procedural work", "be frugal with Fable"
+- User asks for an orchestrator session, or for the session to coordinate agents rather than implement
 - User asks to set up model tiering, delegation rules, or premium-model budget guardrails
 - User says "/model-tier-policy"
 - A session is running on Fable and the user asks for substantial implementation work
