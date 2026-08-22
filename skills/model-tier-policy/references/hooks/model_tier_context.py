@@ -21,7 +21,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import load_config, live_model, project_dir
+    from model_tier_guard import load_config, live_model, orchestrator_active, project_dir
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -46,7 +46,24 @@ hook — the denial tells you how to re-issue as a delegation."""
 PREMIUM_BRIEF = (
     "[model tier policy — {model} (premium): plan and delegate; procedural tools are hook-denied. "
     'Delegate with Agent(subagent_type="{executor}", model="opus", ...) and cap every return. '
-    "Full policy: .claude/rules/model-tiers.md]"
+    "Full policy: .claude/rules/model-tier-policy.md]"
+)
+
+ORCHESTRATOR = """[model tier policy — orchestrator session ({model})]
+You coordinate; you do not implement. Your surface is tickets, plans, dispatch, tracking, and status — nothing else.
+- Decompose work into tickets (GitHub issues) and plan files (`.claude/plans/<slug>.plan.md`); the plan file is the
+  contract you hand out.
+- Dispatch with pinned models: "{executor}" (Opus) implements, "{senior}" (Fable) for entangled work, "{scout}" (Opus,
+  read-only) investigates, "{runner}" (Sonnet) sweeps, "build-runner" (Sonnet) proves refs one at a time,
+  "code-reviewer" reads the green diff (Fable first pass, opus follow-ups), "{architect}" (Fable) decides. Cap every
+  return.
+- Read tickets and plans, never source or logs. Your scarce resource is longevity: a coordinator that hoards context
+  dies of compaction mid-project.
+Edits, shell, and workflows are denied by hook; ticket writes are allowed. The denial tells you how to delegate."""
+
+ORCHESTRATOR_BRIEF = (
+    "[model tier policy — orchestrator session ({model}): coordinate and dispatch; procedural tools are hook-denied, "
+    "ticket writes allowed. Full policy: .claude/rules/model-tier-policy.md]"
 )
 
 WORKER = """[model tier policy — active tier: {model}]
@@ -62,7 +79,7 @@ Under 40 lines, no source dumps."""
 WORKER_BRIEF = (
     "[model tier policy — {model}: executor tier, do the work yourself. "
     'Escalate to "{architect}" (fable) for a decision, "{senior}" (fable) only when a decision alone would not '
-    "unblock the work. Full policy: .claude/rules/model-tiers.md]"
+    "unblock the work. Full policy: .claude/rules/model-tier-policy.md]"
 )
 
 
@@ -72,6 +89,10 @@ def turn_number(session_id, anchor, dedupe_key):
     Returns None when this is a duplicate firing of an event already handled. If the policy is installed at both user
     and project scope, two copies of this hook run per event; without the check they would inject the reminder twice
     and advance the counter at twice the rate, so the full text would land every 5 turns instead of every 10.
+
+    A duplicate is recognized by the *other copy's* script path, not by timing alone: without a prompt_id every
+    UserPromptSubmit shares one dedupe key, and a timing-only check would swallow real turns arriving inside the
+    window — no reminder, and a stalled counter. The same copy firing again is always a new event.
     """
     path = os.path.join(tempfile.gettempdir(), "claude-model-tier-ctx-%s.json" % re.sub(r"\W", "", session_id)[:64])
     state = {}
@@ -81,13 +102,18 @@ def turn_number(session_id, anchor, dedupe_key):
         pass
 
     now = time.time()
-    if state.get("key") == dedupe_key and now - float(state.get("ts") or 0) < DEDUPE_WINDOW_SECONDS:
-        return None
+    script = os.path.abspath(__file__)
+    if (
+        state.get("key") == dedupe_key
+        and state.get("script") not in (None, script)
+        and now - float(state.get("ts") or 0) < DEDUPE_WINDOW_SECONDS
+    ):
+        return None  # the other installed copy already injected for this event
 
     count = 1 if anchor else int(state.get("turns", 0)) + 1
     try:
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump({"turns": count, "key": dedupe_key, "ts": now}, fh)
+            json.dump({"turns": count, "key": dedupe_key, "ts": now, "script": script}, fh)
     except Exception:
         pass
     return count
@@ -141,6 +167,16 @@ def main():
             scout=cfg["scout_agent"],
             senior=cfg["senior_agent"],
             budget=cfg.get("read_budget", 8),
+        )
+    elif orchestrator_active(cfg):
+        template = ORCHESTRATOR if full else ORCHESTRATOR_BRIEF
+        context = template.format(
+            model=model,
+            executor=cfg["executor_agent"],
+            runner=cfg["runner_agent"],
+            scout=cfg["scout_agent"],
+            senior=cfg["senior_agent"],
+            architect=cfg["architect_agent"],
         )
     else:
         template = WORKER if full else WORKER_BRIEF
