@@ -18,26 +18,32 @@ could have read. So the rule is stronger than "don't let Fable edit files":
 
 > **Fable spends tokens on decisions, never on data.**
 
-This skill is **project-agnostic**. It ships an always-on rules file, five pinned-model subagents, and two hooks that
+This skill is **project-agnostic**. It ships an always-on rules file, seven pinned-model subagents, and two hooks that
 enforce the split mechanically so the working model cannot quietly drift back into doing the work itself.
 
 ---
 
 ## The roles
 
-Five roles, each pinned to a model. Four ship as subagents the architect delegates to; the architect is whoever holds
-the premium session.
+Six roles, each pinned to a model. Five ship as subagents the architect delegates to; the architect is whoever holds the
+premium session.
 
-| Role                       | Agent             | Model                               | Owns                                                                                             |
-| -------------------------- | ----------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Architect** (premium)    | `architect`       | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review |
-| **Executor** (default)     | `executor`        | Opus 5 (`claude-opus-5`)            | All implementation: edits, refactors, tests, builds, git, debugging                              |
-| **Scout** (research)       | `scout`           | Opus 5 (`claude-opus-5`), read-only | Investigation: how something works, where it lives, why it breaks, what the blast radius is      |
-| **Devil's advocate** (opt) | `devils-advocate` | Opus 5 (`claude-opus-5`), read-only | Adversarial review of a plan before it is built: ranked objections and a verdict                 |
-| **Runner** (bulk)          | `runner`          | Sonnet 5 (`claude-sonnet-5`)        | High-volume mechanical work: repetitive renames, formatting sweeps, boilerplate, log triage      |
+| Role                       | Agent              | Model                               | Owns                                                                                                                                |
+| -------------------------- | ------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Architect** (premium)    | `architect`        | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review                                    |
+| **Senior developer**       | `senior-developer` | Fable 5 (`claude-fable-5`)          | Tricky or novel implementation where design and code must be found together                                                         |
+| **Executor** (default)     | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation: edits, refactors, tests, builds, git, debugging                                                                 |
+| **Scout** (research)       | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how something works, where it lives, why it breaks, what the blast radius is                                         |
+| **Devil's advocate** (opt) | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Adversarial review of a plan before it is built: ranked objections and a verdict                                                    |
+| **Runner** (bulk)          | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | High-volume mechanical work — repetitive renames, formatting sweeps, boilerplate — and build/test runs with logs captured to a file |
 
 **Opus is the default worker.** Reach for Sonnet only when the task is genuinely mechanical and voluminous enough that
 the tier difference matters. When unsure between Opus and Sonnet, pick Opus.
+
+**Senior developer is the rare premium implementation tier.** Use it when the design and implementation are entangled,
+an executor failed for an unnamed reason, the change is hard to reverse, or the problem is novel enough that a plan
+would be guesswork. It may change the approach, not the goal. If a decision would unblock the work, use `architect`
+instead; use `senior-developer` when a decision alone would not be enough.
 
 **Scout is the one to reach for most often and remember least.** Every question you would answer by reading files is a
 scout's job — it reads in its own context and returns findings, so the premium window never sees the files. The
@@ -47,6 +53,13 @@ scout's job — it reads in its own context and returns findings, so the premium
 or built on an assumption you have not tested. Skip it for routine work — a critic invoked on everything gets ignored on
 the thing that mattered. It runs on Opus because it is a check, not a second architect; pass `model: "fable"` explicitly
 on the rare decision worth two premium opinions.
+
+**Specialists sit beside the roles, not among them.** `build-analyst` (Haiku) is not a tier — it is a narrow tool for
+one recurring waste: re-running a failed build to re-read output the build already wrote. Hand it the log _path_, never
+the log. Both `verdict: <cause>` and `verdict: undetermined` are first-class returns, because an honest "could not tell"
+costs one re-run while a confident wrong answer costs a wrong fix. Project-specific signatures that look like failures
+but are not — cache poisoning, plugin flakes, coverage thresholds — belong in the target repo's
+`.claude/build-signatures.md`, which the agent reads when present.
 
 ### What "procedural" means
 
@@ -84,6 +97,10 @@ free, and means you never re-derive the same decisions after context loss. A pla
 gets paid for twice.
 
 Use `record-decision` for choices worth preserving beyond the task.
+
+Add `.claude/plans/` to the repo's `.gitignore`. Plan files are session working artifacts, not deliverables — left
+tracked, every session ends with an untracked-files warning from any tree-cleanliness hook. The installer does not edit
+`.gitignore` for you; that is a one-line decision each repo should make deliberately.
 
 ### 2a. Stress-test the plan (optional)
 
@@ -148,14 +165,13 @@ telling you exactly how to re-issue the call as a delegation.
 
 ## Working the other direction (Opus-led)
 
-If the session model is Opus or Sonnet, the policy inverts: **do the work yourself, and escalate to Fable only for
-decisions that are genuinely hard.** Spawn an `architect` subagent (`model: fable`) when — and only when — you hit a
-real fork: an architectural choice with lasting consequences, a design you cannot converge on, or a repeated failure
-whose cause you cannot name.
+If the session model is Opus or Sonnet, the policy inverts: **do the work yourself, and escalate to Fable only when
+needed.** Spawn `architect` (`model: fable`) for a hard decision; spawn `senior-developer` (`model: fable`) when the
+design and implementation must be discovered together or the work is too hard to hand off as a plan.
 
 Escalation briefs must be _distilled_: state the question, the options you have already ruled out and why, the
 constraints, and the specific decision you need. Never hand Fable a pile of source to read. A good escalation is under
-40 lines and returns a decision, not an implementation.
+40 lines. Architect returns a decision; senior-developer returns working code plus the judgment calls behind it.
 
 Do not escalate for: something you are merely unsure about but could resolve by reading code, routine design with an
 obvious convention to follow, or work that is just tedious.
@@ -182,10 +198,10 @@ obvious convention to follow, or work that is just tedious.
 the files under `references/` are inert wherever the skill lives. Enforcement comes from `install.py`, which copies
 those files to the paths Claude Code actually reads. Both steps are useful and they are independent:
 
-| Step                                                                         | Gives you                                                              |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Copy `skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement              |
-| Run `install.py --target <repo>`                                             | The rules file, the four agents, and the two hooks — the actual policy |
+| Step                                                                         | Gives you                                                               |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Copy `skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement               |
+| Run `install.py --target <repo>`                                             | The rules file, the seven agents, and the two hooks — the actual policy |
 
 Having the skill at user level and the policy installed per repo is the expected setup: the skill copy creates nothing
 under `~/.claude/agents/`, `~/.claude/hooks/`, `~/.claude/rules/`, or `~/.claude/settings.json`, so there is exactly one
@@ -203,6 +219,10 @@ Run from the repo you want the policy active in:
 python3 /path/to/claude-skills/skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
+Run it from a full `claude-skills` checkout. The seven agent definitions live in the repo's top-level
+`agents/model-tier/` catalog rather than inside the skill, so a lone copy of `skills/model-tier-policy/` has nothing to
+install them from — the installer says so and exits rather than writing a half-installed policy.
+
 The installer is idempotent and reports what it changed. It writes:
 
 | File                                  | Role                                                                                 |
@@ -212,6 +232,8 @@ The installer is idempotent and reports what it changed. It writes:
 | `.claude/agents/runner.md`            | Sonnet, full tools — bulk mechanical work                                            |
 | `.claude/agents/scout.md`             | Opus, read-only — investigation that returns findings, not dumps                     |
 | `.claude/agents/architect.md`         | Fable, read-only — for Opus-led sessions escalating a decision                       |
+| `.claude/agents/senior-developer.md`  | Fable, writes code — for novel or tightly coupled implementation                     |
+| `.claude/agents/build-analyst.md`     | Haiku, read-only — failed-build log triage from a path                               |
 | `.claude/agents/devils-advocate.md`   | Opus, read-only — optional adversarial review of a plan before it is built           |
 | `.claude/hooks/model_tier_guard.py`   | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
 | `.claude/hooks/model_tier_context.py` | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
@@ -315,6 +337,7 @@ PyYAML happens to be installed).
 | `executor_agent`          | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
 | `runner_agent`            | `"runner"`                                                                                      | Bulk-work agent name                                                        |
 | `scout_agent`             | `"scout"`                                                                                       | Read-only investigation agent name                                          |
+| `senior_agent`            | `"senior-developer"`                                                                            | Premium implementation agent name                                           |
 | `advocate_agent`          | `"devils-advocate"`                                                                             | Optional plan-review agent name                                             |
 
 ### Escape hatch

@@ -13,6 +13,9 @@ skills/
 rules/
   {category}/
     {rule-name}.md  — an always-loaded instruction block, installed to .claude/rules/
+agents/
+  {category}/
+    {agent-name}.md — a model-pinned subagent definition, installed to .claude/agents/
 ```
 
 Each skill lives in its own directory under `skills/`. The `SKILL.md` file is the complete, self-contained skill
@@ -28,6 +31,12 @@ Rules are grouped by category directory — `rules/git-etiquette/semi-linear-his
 is organized the same way. Claude Code discovers `.md` files under `.claude/rules/` recursively, so the category
 directory can be preserved on install.
 
+Agents are the third kind: a subagent definition — role, instructions, and a pinned `model` — that Claude Code delegates
+to by name once it sits in `.claude/agents/`. They live in a top-level `agents/{category}/` catalog rather than inside
+any one skill, because more than one skill may want to cite the same role. Claude Code reads `.claude/agents/` flat, so
+the category directory is **not** preserved on install. The catalog entries are examples for consuming repos — this repo
+does not install them into its own `.claude/`.
+
 ## Conventions
 
 - Skills are **project-agnostic** unless their name includes a project prefix (e.g., `arda-end-session`).
@@ -40,6 +49,8 @@ directory can be preserved on install.
   is `paths:`, which scopes it to matching files.
 - Rules are written as standing instructions, not documentation about the repo. One topic per file, grouped into a
   category directory.
+- An agent file carries only the frontmatter Claude Code's subagent format needs — `name`, `description`, `model`, and
+  `tools` where the role is restricted. Nothing else; catalog metadata lives in the README table.
 
 ## Adding a new skill
 
@@ -53,6 +64,16 @@ directory can be preserved on install.
    category directory, or add one when the topic is genuinely new.
 2. Add it to the rule catalog in the README, under its category heading.
 3. If this repo should follow it too, copy it to `.claude/rules/{category}/{rule-name}.md`.
+
+## Adding a new agent
+
+1. Create `agents/{category}/{agent-name}.md` — the complete subagent definition, written to be installed verbatim.
+   Reuse an existing category directory, or add one when the role belongs to a genuinely new group.
+2. Always pin `model:`. An unpinned subagent inherits its caller's model, which is the cost the `model-tier-policy`
+   skill exists to prevent.
+3. Add it to the agent catalog in the README, under its category heading.
+4. If a skill installs it, add it to that skill's installer — `model-tier-policy` sources its agents from
+   `agents/model-tier/`, so a new role there needs a line in `skills/model-tier-policy/references/install.py`.
 
 ## This repo's own rules
 

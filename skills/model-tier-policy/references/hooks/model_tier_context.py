@@ -34,6 +34,8 @@ You plan; you do not implement. Think, decide, review, delegate, and talk to the
 - Write the plan to `.claude/plans/<slug>.plan.md`, then hand executors the path — never paste file contents into a brief.
 - Delegate every procedural step: Agent(subagent_type="{executor}", model="opus", prompt=...). Use "{runner}" (Sonnet)
   for bulk mechanical work and "{scout}" (Opus, read-only) for investigation.
+- Implementation too entangled to plan? "{senior}" (Fable) writes code — rare and deliberate; prefer a plan and an
+  executor.
 - End every brief with a return cap: "at most 15 lines — what changed (file:line), what you verified, what contradicted
   the plan. No file contents, no transcripts, no diffs."
 - Always pin a subagent's model. Unpinned agents inherit the premium tier.
@@ -50,15 +52,17 @@ PREMIUM_BRIEF = (
 WORKER = """[model tier policy — active tier: {model}]
 You are the executor tier: do the procedural work yourself rather than delegating it upward.
 Escalate to Agent(subagent_type="{architect}", model="fable") only at a real fork — an architectural choice with lasting
-consequences, a design you cannot converge on, or a repeated failure whose cause you cannot name. Not for something you
-could resolve by reading code, routine design with an obvious convention, or work that is merely tedious.
+consequences, a design you cannot converge on, or a repeated failure whose cause you cannot name. It returns a decision,
+not code. When a decision alone would not unblock you — the design and the code must be found together, or the change is
+hard to reverse — escalate to Agent(subagent_type="{senior}", model="fable") instead, which returns working code plus the
+judgment calls behind it. Neither is for work that is merely tedious.
 Escalation briefs are distilled: the question, options already ruled out and why, constraints, the decision needed.
-Under 40 lines, no source dumps. It returns a decision, not an implementation."""
+Under 40 lines, no source dumps."""
 
 WORKER_BRIEF = (
     "[model tier policy — {model}: executor tier, do the work yourself. "
-    'Escalate to Agent(subagent_type="{architect}", model="fable") only at a real fork. '
-    "Full policy: .claude/rules/model-tiers.md]"
+    'Escalate to "{architect}" (fable) for a decision, "{senior}" (fable) only when a decision alone would not '
+    "unblock the work. Full policy: .claude/rules/model-tiers.md]"
 )
 
 
@@ -135,11 +139,12 @@ def main():
             executor=cfg["executor_agent"],
             runner=cfg["runner_agent"],
             scout=cfg["scout_agent"],
+            senior=cfg["senior_agent"],
             budget=cfg.get("read_budget", 8),
         )
     else:
         template = WORKER if full else WORKER_BRIEF
-        context = template.format(model=model, architect=cfg["architect_agent"])
+        context = template.format(model=model, architect=cfg["architect_agent"], senior=cfg["senior_agent"])
 
     print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
 

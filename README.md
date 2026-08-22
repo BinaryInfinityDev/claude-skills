@@ -38,9 +38,11 @@ folded into a consolidated CSV and the tracking branch cleared.
 | ------------------------------------------------------ | ------------------------------------------------------------------------ |
 | [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 (or Sonnet 5) does the procedural work |
 
-Five roles, each pinned to a model: `architect` (Fable 5) frames and decides, `executor` (Opus 5) implements, `scout`
-(Opus 5, read-only) investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only)
-optionally stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work.
+Six roles, each pinned to a model: `architect` (Fable 5) frames and decides, `senior-developer` (Fable 5) implements the
+rare change too entangled to hand off as a plan, `executor` (Opus 5) implements, `scout` (Opus 5, read-only)
+investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only) optionally
+stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work, plus a
+`build-analyst` specialist (Haiku 4.5) that triages failed-build logs from a path instead of re-running the build.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
@@ -49,11 +51,46 @@ the agents, and the hooks to the paths Claude Code reads, and enforcement comes 
 python3 skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
-The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, those four subagents,
+The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, those seven subagents,
 and two hooks. A `PreToolUse` guard hard-denies edits, shell commands, workflows, and unpinned subagent spawns while the
 main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the policy periodically — in full every 10th
 turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
 itself becoming a context cost.
+
+## Agents
+
+Agents are reusable subagent definitions — a role, its instructions, and the model it runs on, in one file. Copy one
+into `.claude/agents/` (or `~/.claude/agents/`) and Claude Code can delegate to it by name. Every agent here pins its
+own `model`, which is the point: a subagent's model otherwise defaults to `inherit`, so an unpinned spawn from a premium
+session quietly runs the whole subtask on the premium tier.
+
+Agents are grouped by category: `agents/{category}/{agent-name}.md`.
+
+### Model Tier
+
+The six roles of the [model-tier-policy](skills/model-tier-policy/SKILL.md) skill, plus the specialists that ship
+alongside them. Its installer writes these into a target repo for you; copy them by hand only if you want the roles
+without the enforcement.
+
+| Agent                                                     | Model     | Description                                                                        |
+| --------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------- |
+| [architect](agents/model-tier/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
+| [senior-developer](agents/model-tier/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
+| [executor](agents/model-tier/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
+| [scout](agents/model-tier/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
+| [devils-advocate](agents/model-tier/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
+| [runner](agents/model-tier/runner.md)                     | Sonnet 5  | Bulk mechanical work and build/test runs — failure logs go to build-analyst        |
+| [build-analyst](agents/model-tier/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
+
+## Installing an agent
+
+Copy the agent file into `.claude/agents/`. Claude Code reads that directory flat, so the category directory is not
+preserved on install:
+
+```bash
+mkdir -p /path/to/repo/.claude/agents
+cp agents/model-tier/*.md /path/to/repo/.claude/agents/
+```
 
 ## Rules
 
