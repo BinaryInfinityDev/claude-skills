@@ -41,8 +41,10 @@ folded into a consolidated CSV and the tracking branch cleared.
 Six roles, each pinned to a model: `architect` (Fable 5) frames and decides, `senior-developer` (Fable 5) implements the
 rare change too entangled to hand off as a plan, `executor` (Opus 5) implements, `scout` (Opus 5, read-only)
 investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only) optionally
-stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work, plus a
-`build-analyst` specialist (Haiku 4.5) that triages failed-build logs from a path instead of re-running the build.
+stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work. Two specialists sit
+beside them: `build-runner` (Sonnet 5) proves a ref in an isolated git worktree — one build at a time, lock-enforced,
+timed against a ledger — and `build-analyst` (Haiku 4.5) triages failed-build logs from a path instead of re-running the
+build.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
@@ -51,7 +53,7 @@ the agents, and the hooks to the paths Claude Code reads, and enforcement comes 
 python3 skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
-The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, those seven subagents,
+The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, the subagents above,
 and two hooks. A `PreToolUse` guard hard-denies edits, shell commands, workflows, and unpinned subagent spawns while the
 main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the policy periodically — in full every 10th
 turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
@@ -79,7 +81,8 @@ without the enforcement.
 | [executor](agents/model-tier-policy/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
 | [scout](agents/model-tier-policy/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
 | [devils-advocate](agents/model-tier-policy/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
-| [runner](agents/model-tier-policy/runner.md)                     | Sonnet 5  | Bulk mechanical work and build/test runs — failure logs go to build-analyst        |
+| [runner](agents/model-tier-policy/runner.md)                     | Sonnet 5  | Bulk mechanical work — heavy builds go to build-runner                             |
+| [build-runner](agents/model-tier-policy/build-runner.md)         | Sonnet 5  | Heavy builds in an isolated worktree — one at a time, timed, cleaned up            |
 | [build-analyst](agents/model-tier-policy/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
 
 ## Installing an agent

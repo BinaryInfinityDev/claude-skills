@@ -2,14 +2,14 @@
 
 Work is split by model tier across six roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
 
-| Role                 | Agent              | Model                               | Owns                                                                                                            |
-| -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Architect**        | `architect`        | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review                                   |
-| **Senior developer** | `senior-developer` | Fable 5 (`claude-fable-5`)          | Implementation of tricky or novel work — where design and code must be found together                           |
-| **Executor**         | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**                                           |
-| **Scout**            | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius                                    |
-| **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict                                |
-| **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work — repetitive edits, formatting, boilerplate — and build/test runs, logs captured to a file |
+| Role                 | Agent              | Model                               | Owns                                                                                                |
+| -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Architect**        | `architect`        | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review                       |
+| **Senior developer** | `senior-developer` | Fable 5 (`claude-fable-5`)          | Implementation of tricky or novel work — where design and code must be found together               |
+| **Executor**         | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**                               |
+| **Scout**            | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius                        |
+| **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict                    |
+| **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work — repetitive edits, formatting, boilerplate; heavy builds go to `build-runner` |
 
 The **senior developer** is the one premium-tier role that writes code — for work that cannot be reduced to a plan an
 executor could carry out. It may change the approach but not the goal, and it delegates its own reading to `scout` and
@@ -72,8 +72,11 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 4. Delegate wide, not deep — independent tasks go out as parallel executors in a single message.
 5. Cap every return.
 6. Don't escalate a question a scout can answer.
-7. A failed build is diagnosed from its log: hand `build-analyst` the log path — do not re-run to re-see output, and
-   never paste a log into premium context.
+7. A heavy build or test run goes to `build-runner` (Sonnet 5): it builds the ref in its own worktree — one at a time,
+   lock-enforced — times the run against `.claude/build-timings.md`, and reports verdict, timing, and log path. Quick,
+   known-cheap checks any agent may run in-tree.
+8. A failed build is diagnosed from its log: hand `build-analyst` (Haiku 4.5) the log path — do not re-run to re-see
+   output, and never paste a log into premium context.
 
 ## Escape hatch
 
