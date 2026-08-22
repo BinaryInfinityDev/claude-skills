@@ -34,7 +34,8 @@ directory can be preserved on install.
 Agents are the third kind: a subagent definition — role, instructions, and a pinned `model` — that Claude Code delegates
 to by name once it sits in `.claude/agents/`. They live in a top-level `agents/{category}/` catalog rather than inside
 any one skill, because more than one skill may want to cite the same role. Claude Code reads `.claude/agents/` flat, so
-the category directory is **not** preserved on install.
+the category directory is **not** preserved on install. The catalog entries are examples for consuming repos — this repo
+does not install them into its own `.claude/`.
 
 ## Conventions
 
@@ -73,16 +74,12 @@ the category directory is **not** preserved on install.
 3. Add it to the agent catalog in the README, under its category heading.
 4. If a skill installs it, add it to that skill's installer — `model-tier-policy` sources its agents from
    `agents/model-tier/`, so a new role there needs a line in `skills/model-tier-policy/references/install.py`.
-5. If this repo should use it too, copy it to `.claude/agents/{agent-name}.md`.
 
-## This repo's own rules and agents
+## This repo's own rules
 
 `.claude/rules/git-etiquette/semi-linear-history.md` is a copy of `rules/git-etiquette/semi-linear-history.md`. **Keep
 the two in sync** — edit the canonical copy under `rules/`, then re-copy. This repo follows semi-linear history: branch,
 rebase onto `main`, merge with a merge commit, never squash or rebase-merge.
-
-`.claude/agents/*.md` are copies of `agents/model-tier/*.md`. **Keep them in sync the same way** — edit the canonical
-copy under `agents/model-tier/`, then re-copy. Claude Code reads `.claude/agents/` flat, so the copies are unprefixed.
 
 ## Skill catalog
 
