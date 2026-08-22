@@ -34,15 +34,19 @@ folded into a consolidated CSV and the tracking branch cleared.
 
 ### Model Budget
 
-| Skill                                                  | Description                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------ |
-| [model-tier-policy](skills/model-tier-policy/SKILL.md) | Fable 5 plans and reviews; Opus 5 (or Sonnet 5) does the procedural work |
+| Skill                                                  | Description                                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| [model-tier-policy](skills/model-tier-policy/SKILL.md) | An Opus 5 orchestrator coordinates; Fable 5 plans and reviews; Opus 5 / Sonnet 5 do the procedural work |
 
-Six roles, each pinned to a model: `architect` (Fable 5) frames and decides, `senior-developer` (Fable 5) implements the
-rare change too entangled to hand off as a plan, `executor` (Opus 5) implements, `scout` (Opus 5, read-only)
-investigates and returns findings instead of file contents, `devils-advocate` (Opus 5, read-only) optionally
-stress-tests a plan before anyone builds it, and `runner` (Sonnet 5) handles bulk mechanical work, plus a
-`build-analyst` specialist (Haiku 4.5) that triages failed-build logs from a path instead of re-running the build.
+Eight roles, each pinned to a model: `orchestrator` (Opus 5) holds the session's main loop in the recommended topology
+and coordinates — tickets, plans, dispatch, never implementation; `architect` (Fable 5) frames and decides;
+`senior-developer` (Fable 5) implements the rare change too entangled to hand off as a plan; `executor` (Opus 5)
+implements; `code-reviewer` (Fable 5 for the first pass per PR, Opus 5 for follow-ups, read-only) reads the proven diff
+adversarially before the PR is marked ready; `scout` (Opus 5, read-only) investigates and returns findings instead of
+file contents; `devils-advocate` (Opus 5, read-only) optionally stress-tests a plan before anyone builds it; and
+`runner` (Sonnet 5) handles bulk mechanical work. Two specialists sit beside them: `build-runner` (Sonnet 5) proves a
+ref in an isolated git worktree — one build at a time, lock-enforced, timed against a ledger — and `build-analyst`
+(Haiku 4.5) triages failed-build logs from a path instead of re-running the build.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
@@ -51,7 +55,7 @@ the agents, and the hooks to the paths Claude Code reads, and enforcement comes 
 python3 skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
-The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, those seven subagents,
+The hooks are live immediately; no session restart is needed. Ships an always-loaded rules file, the subagents above,
 and two hooks. A `PreToolUse` guard hard-denies edits, shell commands, workflows, and unpinned subagent spawns while the
 main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the policy periodically — in full every 10th
 turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
@@ -66,21 +70,24 @@ session quietly runs the whole subtask on the premium tier.
 
 Agents are grouped by category: `agents/{category}/{agent-name}.md`.
 
-### Model Tier
+### Model Tier Policy
 
-The six roles of the [model-tier-policy](skills/model-tier-policy/SKILL.md) skill, plus the specialists that ship
-alongside them. Its installer writes these into a target repo for you; copy them by hand only if you want the roles
-without the enforcement.
+The roles of the [model-tier-policy](skills/model-tier-policy/SKILL.md) skill, plus the specialists that ship alongside
+them. Its installer writes these into a target repo for you; copy them by hand only if you want the roles without the
+enforcement.
 
-| Agent                                                     | Model     | Description                                                                        |
-| --------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------- |
-| [architect](agents/model-tier/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
-| [senior-developer](agents/model-tier/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
-| [executor](agents/model-tier/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
-| [scout](agents/model-tier/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
-| [devils-advocate](agents/model-tier/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
-| [runner](agents/model-tier/runner.md)                     | Sonnet 5  | Bulk mechanical work and build/test runs — failure logs go to build-analyst        |
-| [build-analyst](agents/model-tier/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
+| Agent                                                            | Model     | Description                                                                        |
+| ---------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------- |
+| [orchestrator](agents/model-tier-policy/orchestrator.md)         | Opus 5    | Coordinates the team from the main loop — tickets, plans, dispatch; never works    |
+| [architect](agents/model-tier-policy/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
+| [senior-developer](agents/model-tier-policy/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
+| [executor](agents/model-tier-policy/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
+| [code-reviewer](agents/model-tier-policy/code-reviewer.md)       | Fable 5   | Adversarial read of the proven diff before the PR is ready; Opus 5 for follow-ups  |
+| [scout](agents/model-tier-policy/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
+| [devils-advocate](agents/model-tier-policy/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
+| [runner](agents/model-tier-policy/runner.md)                     | Sonnet 5  | Bulk mechanical work — heavy builds go to build-runner                             |
+| [build-runner](agents/model-tier-policy/build-runner.md)         | Sonnet 5  | Heavy builds in an isolated worktree — one at a time, timed, cleaned up            |
+| [build-analyst](agents/model-tier-policy/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
 
 ## Installing an agent
 
@@ -89,7 +96,7 @@ preserved on install:
 
 ```bash
 mkdir -p /path/to/repo/.claude/agents
-cp agents/model-tier/*.md /path/to/repo/.claude/agents/
+cp agents/model-tier-policy/*.md /path/to/repo/.claude/agents/
 ```
 
 ## Rules
@@ -105,6 +112,15 @@ Rules are grouped by category: `rules/{category}/{rule-name}.md`.
 | Rule                                                              | Description                                                                                      |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | [semi-linear-history](rules/git-etiquette/semi-linear-history.md) | Branch, rebase onto base, merge with a merge commit — plus commit style and force-push etiquette |
+
+### Build Discipline
+
+| Rule                                                         | Description                                                                                       |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| [worktree-builds](rules/build-discipline/worktree-builds.md) | Long builds run in a dedicated worktree beside development — one at a time, pushes gated on green |
+
+The model-tier-policy installer installs this one automatically alongside the `build-runner` agent, since the agent's
+worktree and lock mechanics assume its session-side conventions; other repos can install it by hand as below.
 
 ## Installing a rule
 

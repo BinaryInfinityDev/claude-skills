@@ -3,18 +3,22 @@
   "premium_model_pattern": "fable",
   "read_budget": 8,
   "reminder_interval": 10,
+  "orchestrator_mode": false,
+  "orchestrator_tools_allowed": [
+    "^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"
+  ],
   "executor_agent": "executor",
   "runner_agent": "runner",
   "scout_agent": "scout",
   "architect_agent": "architect",
   "senior_agent": "senior-developer",
-  "advocate_agent": "devils-advocate",
   "write_allowed": [
     ".claude/plans/**",
     "docs/plans/**",
     "**/*.plan.md",
     ".claude/decisions/**",
-    "decisions/**"
+    "decisions/**",
+    ".claude/reviews/**"
   ],
   "bash_allowed": [],
   "research_tools_allowed": [
