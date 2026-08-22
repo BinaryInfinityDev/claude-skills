@@ -77,5 +77,6 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 
 ## Escape hatch
 
-`MODEL_TIER_POLICY=off`, or `"enabled": false` in `.claude/model-tiers.json`. If the user explicitly asks the premium
-tier to do procedural work anyway, say the policy blocks it and offer the escape hatch — do not silently work around it.
+`MODEL_TIER_POLICY=off`, or `"enabled": false` in `.claude/model-tier-policy.json`. If the user explicitly asks the
+premium tier to do procedural work anyway, say the policy blocks it and offer the escape hatch — do not silently work
+around it.

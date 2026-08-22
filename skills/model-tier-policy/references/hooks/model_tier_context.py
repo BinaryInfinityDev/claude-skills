@@ -46,7 +46,7 @@ hook — the denial tells you how to re-issue as a delegation."""
 PREMIUM_BRIEF = (
     "[model tier policy — {model} (premium): plan and delegate; procedural tools are hook-denied. "
     'Delegate with Agent(subagent_type="{executor}", model="opus", ...) and cap every return. '
-    "Full policy: .claude/rules/model-tiers.md]"
+    "Full policy: .claude/rules/model-tier-policy.md]"
 )
 
 WORKER = """[model tier policy — active tier: {model}]
@@ -62,7 +62,7 @@ Under 40 lines, no source dumps."""
 WORKER_BRIEF = (
     "[model tier policy — {model}: executor tier, do the work yourself. "
     'Escalate to "{architect}" (fable) for a decision, "{senior}" (fable) only when a decision alone would not '
-    "unblock the work. Full policy: .claude/rules/model-tiers.md]"
+    "unblock the work. Full policy: .claude/rules/model-tier-policy.md]"
 )
 
 

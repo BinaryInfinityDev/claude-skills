@@ -220,14 +220,14 @@ python3 /path/to/claude-skills/skills/model-tier-policy/references/install.py --
 ```
 
 Run it from a full `claude-skills` checkout. The seven agent definitions live in the repo's top-level
-`agents/model-tier/` catalog rather than inside the skill, so a lone copy of `skills/model-tier-policy/` has nothing to
-install them from — the installer says so and exits rather than writing a half-installed policy.
+`agents/model-tier-policy/` catalog rather than inside the skill, so a lone copy of `skills/model-tier-policy/` has
+nothing to install them from — the installer says so and exits rather than writing a half-installed policy.
 
 The installer is idempotent and reports what it changed. It writes:
 
 | File                                  | Role                                                                                 |
 | ------------------------------------- | ------------------------------------------------------------------------------------ |
-| `.claude/rules/model-tiers.md`        | Always-loaded rules — in context every session, survives compaction                  |
+| `.claude/rules/model-tier-policy.md`  | Always-loaded rules — in context every session, survives compaction                  |
 | `.claude/agents/executor.md`          | Opus, full tools — the default worker                                                |
 | `.claude/agents/runner.md`            | Sonnet, full tools — bulk mechanical work                                            |
 | `.claude/agents/scout.md`             | Opus, read-only — investigation that returns findings, not dumps                     |
@@ -237,7 +237,7 @@ The installer is idempotent and reports what it changed. It writes:
 | `.claude/agents/devils-advocate.md`   | Opus, read-only — optional adversarial review of a plan before it is built           |
 | `.claude/hooks/model_tier_guard.py`   | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
 | `.claude/hooks/model_tier_context.py` | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
-| `.claude/model-tiers.json`            | Config (see below)                                                                   |
+| `.claude/model-tier-policy.json`      | Config (see below)                                                                   |
 | `.claude/settings.json`               | Hook wiring, merged into whatever is already there                                   |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
@@ -249,7 +249,7 @@ To install by hand instead, copy the files from `references/` to the paths above
 session, so the guard starts denying and the reminder starts injecting on the very next tool call and turn. You will see
 this immediately if you ask the premium tier to run a build.
 
-One piece does wait: `.claude/rules/model-tiers.md` is loaded at session start, so it enters context on your next
+One piece does wait: `.claude/rules/model-tier-policy.md` is loaded at session start, so it enters context on your next
 session rather than the current one. That gap is covered — the reminder hook injects the same policy on the next turn,
 which is exactly what it exists for. Nothing is unenforced in the meantime; the guard never depended on the rules file.
 
@@ -264,7 +264,7 @@ the rules file under memory.
 Instructions alone do not survive a long session; the working model drifts back into doing the work. Three layers,
 weakest to strongest:
 
-**Layer 1 — always-loaded rules.** `.claude/rules/model-tiers.md` loads into every session at launch, at the same
+**Layer 1 — always-loaded rules.** `.claude/rules/model-tier-policy.md` loads into every session at launch, at the same
 priority as `.claude/CLAUDE.md`, and project-root rules are re-injected after compaction.
 
 **Layer 2 — periodic re-injection.** `model_tier_context.py` runs on `UserPromptSubmit` and appends a reminder of the
@@ -321,8 +321,8 @@ sanction writes anywhere on the filesystem. An absolute glob will therefore neve
 
 ## Configuration
 
-`.claude/model-tiers.json` (the hooks are dependency-free and read JSON; `.claude/model-tiers.yaml` is also read when
-PyYAML happens to be installed).
+`.claude/model-tier-policy.json` (the hooks are dependency-free and read JSON; `.claude/model-tier-policy.yaml` is also
+read when PyYAML happens to be installed).
 
 | Key                       | Default                                                                                         | Purpose                                                                     |
 | ------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
@@ -332,7 +332,7 @@ PyYAML happens to be installed).
 | `reminder_interval`       | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
 | `write_allowed`           | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Repo-relative globs the premium tier may write (see below)                  |
 | `bash_allowed`            | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
-| `procedural_tools_denied` | (see `references/model-tiers.json`)                                                             | Regexes for tool names denied on the premium tier                           |
+| `procedural_tools_denied` | (see `references/model-tier-policy.json`)                                                       | Regexes for tool names denied on the premium tier                           |
 | `research_tools_allowed`  | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
 | `executor_agent`          | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
 | `runner_agent`            | `"runner"`                                                                                      | Bulk-work agent name                                                        |
@@ -345,7 +345,7 @@ PyYAML happens to be installed).
 The policy is a budget guardrail, not a safety control — the user can always suspend it:
 
 - `MODEL_TIER_POLICY=off` in the environment disables both hooks for that session
-- `"enabled": false` in `.claude/model-tiers.json` disables it for the repo
+- `"enabled": false` in `.claude/model-tier-policy.json` disables it for the repo
 - Widen `bash_allowed` / `write_allowed` for a specific recurring need
 
 If the user explicitly asks the premium tier to do something procedural anyway, say the policy blocks it and offer the

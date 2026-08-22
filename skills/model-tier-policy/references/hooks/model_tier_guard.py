@@ -90,8 +90,17 @@ def project_dir(payload):
 
 
 def apply_config_files(cfg, root):
-    """Overlay any model-tiers config found under root/.claude onto cfg, in place."""
-    for name, loader in (("model-tiers.json", json.loads), ("model-tiers.yaml", None)):
+    """Overlay any model-tier-policy config found under root/.claude onto cfg, in place.
+
+    The legacy model-tiers.* names are read first so a repo installed before the rename keeps working; when both
+    spellings exist, the current name wins.
+    """
+    for name, loader in (
+        ("model-tiers.json", json.loads),
+        ("model-tiers.yaml", None),
+        ("model-tier-policy.json", json.loads),
+        ("model-tier-policy.yaml", None),
+    ):
         path = os.path.join(root, ".claude", name)
         if not os.path.exists(path):
             continue
@@ -114,7 +123,7 @@ def load_config(root):
 
     The user layer is not optional bookkeeping: hooks always run with $CLAUDE_PROJECT_DIR pointing at the repo, so
     without this a user-scope install would read only the repo's config — and in a repo with no config at all, would
-    silently ignore ~/.claude/model-tiers.json and fall back to the built-in defaults.
+    silently ignore ~/.claude/model-tier-policy.json and fall back to the built-in defaults.
     """
     cfg = dict(DEFAULTS)
     home = os.path.expanduser("~")

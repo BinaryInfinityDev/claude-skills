@@ -73,7 +73,7 @@ does not install them into its own `.claude/`.
    skill exists to prevent.
 3. Add it to the agent catalog in the README, under its category heading.
 4. If a skill installs it, add it to that skill's installer — `model-tier-policy` sources its agents from
-   `agents/model-tier/`, so a new role there needs a line in `skills/model-tier-policy/references/install.py`.
+   `agents/model-tier-policy/`, so a new role there needs a line in `skills/model-tier-policy/references/install.py`.
 
 ## This repo's own rules
 

@@ -9,7 +9,7 @@ Idempotent: re-running updates the shipped files and leaves your config and any 
     python3 install.py --target /path/to/repo [--user] [--force] [--dry-run]
 
     --user   install agents and hooks under ~/.claude instead (applies to every repo)
-    --force  overwrite .claude/model-tiers.json, which is otherwise preserved once created
+    --force  overwrite .claude/model-tier-policy.json, which is otherwise preserved once created
 """
 
 import argparse
@@ -20,11 +20,11 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # The agent definitions are not skill-private: they live in the repo-level catalog so other skills can cite them.
-AGENTS_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "agents", "model-tier"))
+AGENTS_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "agents", "model-tier-policy"))
 
 # (source relative to references/, destination relative to .claude/)
 FILES = [
-    ("rules/model-tiers.md", "rules/model-tiers.md"),
+    ("rules/model-tier-policy.md", "rules/model-tier-policy.md"),
     ("hooks/model_tier_guard.py", "hooks/model_tier_guard.py"),
     ("hooks/model_tier_context.py", "hooks/model_tier_context.py"),
 ]
@@ -38,7 +38,10 @@ AGENT_FILES = [
     ("senior-developer.md", "agents/senior-developer.md"),
     ("devils-advocate.md", "agents/devils-advocate.md"),
 ]
-CONFIG = ("model-tiers.json", "model-tiers.json")
+CONFIG = ("model-tier-policy.json", "model-tier-policy.json")
+# Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
+LEGACY_CONFIG = "model-tiers.json"
+LEGACY_RULE = "rules/model-tiers.md"
 
 
 def load_json(path):
@@ -86,7 +89,7 @@ def main():
     parser = argparse.ArgumentParser(description="Install the model tier policy.")
     parser.add_argument("--target", default=os.getcwd(), help="repository root (default: cwd)")
     parser.add_argument("--user", action="store_true", help="install into ~/.claude instead of the repo")
-    parser.add_argument("--force", action="store_true", help="overwrite an existing model-tiers.json")
+    parser.add_argument("--force", action="store_true", help="overwrite an existing model-tier-policy.json")
     parser.add_argument("--dry-run", action="store_true", help="report what would change without writing")
     args = parser.parse_args()
 
@@ -111,6 +114,16 @@ def main():
             "(the skill directory alone does not carry the agents)" % AGENTS_SRC
         )
 
+    # Migrate installs that predate the consistent model-tier-policy naming: the config is renamed so its contents
+    # survive, and the superseded rules file is removed so both copies don't load into every session.
+    migrations = []
+    legacy_config = os.path.join(claude, LEGACY_CONFIG)
+    if os.path.exists(legacy_config) and not os.path.exists(os.path.join(claude, CONFIG[1])):
+        migrations.append(("rename", legacy_config, os.path.join(claude, CONFIG[1])))
+    legacy_rule = os.path.join(claude, LEGACY_RULE)
+    if os.path.exists(legacy_rule):
+        migrations.append(("remove", legacy_rule, None))
+
     plan = []
     sources = [(os.path.join(HERE, src), dest) for src, dest in FILES + [CONFIG]]
     sources += [(os.path.join(AGENTS_SRC, src), dest) for src, dest in AGENT_FILES]
@@ -118,10 +131,14 @@ def main():
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):
             sys.exit("error: missing source file %s" % src_path)
-        if dest == CONFIG[1] and os.path.exists(dest_path) and not args.force:
+        # A pending rename means the destination will exist by the time the copies run.
+        dest_exists = os.path.exists(dest_path) or any(
+            verb == "rename" and new == dest_path for verb, _old, new in migrations
+        )
+        if dest == CONFIG[1] and dest_exists and not args.force:
             plan.append(("keep", dest_path))
             continue
-        verb = "update" if os.path.exists(dest_path) else "create"
+        verb = "update" if dest_exists else "create"
         plan.append((verb, dest_path, src_path))
 
     settings_path = os.path.join(claude, "settings.json")
@@ -132,6 +149,11 @@ def main():
         snippet = json.loads(json.dumps(snippet).replace("$CLAUDE_PROJECT_DIR", "$HOME"))
     added = merge_hooks(settings, snippet)
 
+    for verb, old, new in migrations:
+        if verb == "rename":
+            print("  %-6s %s -> %s" % (verb, old, os.path.basename(new)))
+        else:
+            print("  %-6s %s (superseded by the model-tier-policy name)" % (verb, old))
     for item in plan:
         print("  %-6s %s" % (item[0], item[1]))
     print("  %-6s %s (%d hook entr%s added)" % ("merge", settings_path, added, "y" if added == 1 else "ies"))
@@ -139,6 +161,12 @@ def main():
     if args.dry_run:
         print("\ndry run — nothing written")
         return
+
+    for verb, old, new in migrations:
+        if verb == "rename":
+            os.replace(old, new)
+        else:
+            os.remove(old)
 
     for item in plan:
         if item[0] == "keep":
@@ -161,7 +189,7 @@ def main():
         "The rules file loads at your next session start; until then the reminder hook carries the same policy, so\n"
         "nothing is unenforced in the meantime.\n"
         "Verify: ask the premium tier to run a build — it should be denied with the delegation to use instead.\n"
-        "Disable at any time with MODEL_TIER_POLICY=off or \"enabled\": false in .claude/model-tiers.json."
+        "Disable at any time with MODEL_TIER_POLICY=off or \"enabled\": false in .claude/model-tier-policy.json."
     )
 
 

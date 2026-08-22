@@ -66,21 +66,21 @@ session quietly runs the whole subtask on the premium tier.
 
 Agents are grouped by category: `agents/{category}/{agent-name}.md`.
 
-### Model Tier
+### Model Tier Policy
 
 The six roles of the [model-tier-policy](skills/model-tier-policy/SKILL.md) skill, plus the specialists that ship
 alongside them. Its installer writes these into a target repo for you; copy them by hand only if you want the roles
 without the enforcement.
 
-| Agent                                                     | Model     | Description                                                                        |
-| --------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------- |
-| [architect](agents/model-tier/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
-| [senior-developer](agents/model-tier/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
-| [executor](agents/model-tier/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
-| [scout](agents/model-tier/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
-| [devils-advocate](agents/model-tier/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
-| [runner](agents/model-tier/runner.md)                     | Sonnet 5  | Bulk mechanical work and build/test runs — failure logs go to build-analyst        |
-| [build-analyst](agents/model-tier/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
+| Agent                                                            | Model     | Description                                                                        |
+| ---------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------- |
+| [architect](agents/model-tier-policy/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
+| [senior-developer](agents/model-tier-policy/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
+| [executor](agents/model-tier-policy/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
+| [scout](agents/model-tier-policy/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
+| [devils-advocate](agents/model-tier-policy/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
+| [runner](agents/model-tier-policy/runner.md)                     | Sonnet 5  | Bulk mechanical work and build/test runs — failure logs go to build-analyst        |
+| [build-analyst](agents/model-tier-policy/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
 
 ## Installing an agent
 
@@ -89,7 +89,7 @@ preserved on install:
 
 ```bash
 mkdir -p /path/to/repo/.claude/agents
-cp agents/model-tier/*.md /path/to/repo/.claude/agents/
+cp agents/model-tier-policy/*.md /path/to/repo/.claude/agents/
 ```
 
 ## Rules
