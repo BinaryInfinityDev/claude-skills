@@ -109,6 +109,15 @@ Rules are grouped by category: `rules/{category}/{rule-name}.md`.
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | [semi-linear-history](rules/git-etiquette/semi-linear-history.md) | Branch, rebase onto base, merge with a merge commit — plus commit style and force-push etiquette |
 
+### Build Discipline
+
+| Rule                                                         | Description                                                                                       |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| [worktree-builds](rules/build-discipline/worktree-builds.md) | Long builds run in a dedicated worktree beside development — one at a time, pushes gated on green |
+
+The model-tier-policy installer installs this one automatically alongside the `build-runner` agent, since the agent's
+worktree and lock mechanics assume its session-side conventions; other repos can install it by hand as below.
+
 ## Installing a rule
 
 Copy the rule file into `.claude/rules/`. Claude Code discovers `.md` files there recursively, so keeping the category

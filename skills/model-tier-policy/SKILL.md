@@ -235,21 +235,22 @@ nothing to install them from — the installer says so and exits rather than wri
 
 The installer is idempotent and reports what it changed. It writes:
 
-| File                                  | Role                                                                                 |
-| ------------------------------------- | ------------------------------------------------------------------------------------ |
-| `.claude/rules/model-tier-policy.md`  | Always-loaded rules — in context every session, survives compaction                  |
-| `.claude/agents/executor.md`          | Opus, full tools — the default worker                                                |
-| `.claude/agents/runner.md`            | Sonnet, full tools — bulk mechanical work                                            |
-| `.claude/agents/scout.md`             | Opus, read-only — investigation that returns findings, not dumps                     |
-| `.claude/agents/architect.md`         | Fable, read-only — for Opus-led sessions escalating a decision                       |
-| `.claude/agents/senior-developer.md`  | Fable, writes code — for novel or tightly coupled implementation                     |
-| `.claude/agents/build-analyst.md`     | Haiku, read-only — failed-build log triage from a path                               |
-| `.claude/agents/build-runner.md`      | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged       |
-| `.claude/agents/devils-advocate.md`   | Opus, read-only — optional adversarial review of a plan before it is built           |
-| `.claude/hooks/model_tier_guard.py`   | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
-| `.claude/hooks/model_tier_context.py` | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
-| `.claude/model-tier-policy.json`      | Config (see below)                                                                   |
-| `.claude/settings.json`               | Hook wiring, merged into whatever is already there                                   |
+| File                                                | Role                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `.claude/rules/model-tier-policy.md`                | Always-loaded rules — in context every session, survives compaction                  |
+| `.claude/rules/build-discipline/worktree-builds.md` | Always-loaded — builds in worktrees beside development, pushes gated on green        |
+| `.claude/agents/executor.md`                        | Opus, full tools — the default worker                                                |
+| `.claude/agents/runner.md`                          | Sonnet, full tools — bulk mechanical work                                            |
+| `.claude/agents/scout.md`                           | Opus, read-only — investigation that returns findings, not dumps                     |
+| `.claude/agents/architect.md`                       | Fable, read-only — for Opus-led sessions escalating a decision                       |
+| `.claude/agents/senior-developer.md`                | Fable, writes code — for novel or tightly coupled implementation                     |
+| `.claude/agents/build-analyst.md`                   | Haiku, read-only — failed-build log triage from a path                               |
+| `.claude/agents/build-runner.md`                    | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged       |
+| `.claude/agents/devils-advocate.md`                 | Opus, read-only — optional adversarial review of a plan before it is built           |
+| `.claude/hooks/model_tier_guard.py`                 | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
+| `.claude/hooks/model_tier_context.py`               | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
+| `.claude/model-tier-policy.json`                    | Config (see below)                                                                   |
+| `.claude/settings.json`                             | Hook wiring, merged into whatever is already there                                   |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
 `references/settings-snippet.json` into `.claude/settings.json`.

@@ -21,6 +21,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 # The agent definitions are not skill-private: they live in the repo-level catalog so other skills can cite them.
 AGENTS_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "agents", "model-tier-policy"))
+# Catalog rules the policy depends on: build-runner's worktree/lock mechanics assume the session-side conventions
+# (one build at a time, the push gate) that this always-loaded rule carries.
+RULES_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "rules"))
 
 # (source relative to references/, destination relative to .claude/)
 FILES = [
@@ -40,6 +43,10 @@ AGENT_FILES = [
     ("devils-advocate.md", "agents/devils-advocate.md"),
 ]
 CONFIG = ("model-tier-policy.json", "model-tier-policy.json")
+# (source relative to RULES_SRC, destination relative to .claude/ — the category directory is preserved for rules)
+CATALOG_RULES = [
+    ("build-discipline/worktree-builds.md", "rules/build-discipline/worktree-builds.md"),
+]
 # Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
 LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
@@ -128,6 +135,7 @@ def main():
     plan = []
     sources = [(os.path.join(HERE, src), dest) for src, dest in FILES + [CONFIG]]
     sources += [(os.path.join(AGENTS_SRC, src), dest) for src, dest in AGENT_FILES]
+    sources += [(os.path.join(RULES_SRC, src), dest) for src, dest in CATALOG_RULES]
     for src_path, dest in sources:
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):
