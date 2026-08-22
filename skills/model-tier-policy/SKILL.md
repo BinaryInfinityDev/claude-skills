@@ -359,15 +359,15 @@ than a retry loop.
 
 ### What the guard denies on the premium tier
 
-| Tool                                        | Decision                                                                                                                  |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Edit` / `Write` / `NotebookEdit`           | Denied, unless the path is inside the repo _and_ matches `write_allowed` (plan and decision files)                        |
-| `Bash` / `BashOutput` / `KillShell`         | Denied, unless the command matches a `bash_allowed` regex (empty by default)                                              |
-| `Read`/`Grep`/`Glob`/`WebFetch`/`WebSearch` | Allowed up to `read_budget` calls per turn, then denied with a pointer to `scout`                                         |
-| `Agent`                                     | Denied unless the call pins a non-premium model — see below                                                               |
-| `Workflow`                                  | Denied — workflow agents inherit the main-loop model, so an unpinned workflow runs the entire fan-out on the premium tier |
-| Mutating MCP tools (e.g. GitHub writes)     | Denied                                                                                                                    |
-| Everything else                             | Allowed                                                                                                                   |
+| Tool                                                       | Decision                                                                                                                  |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `Edit` / `MultiEdit` / `Write` / `NotebookEdit`            | Denied, unless the path is inside the repo _and_ matches `write_allowed` (plan, decision, and review files)               |
+| `Bash` / `BashOutput` / `KillShell`                        | Denied, unless the command matches a `bash_allowed` regex (empty by default)                                              |
+| `Read`/`Grep`/`Glob`/`NotebookRead`/`WebFetch`/`WebSearch` | Allowed up to `read_budget` calls per turn, then denied with a pointer to `scout`                                         |
+| `Agent` (`Task` in some builds)                            | Denied unless the model cannot be inherited by accident: an explicit pin, or a definition-file pin — see below            |
+| `Workflow`                                                 | Denied — workflow agents inherit the main-loop model, so an unpinned workflow runs the entire fan-out on the premium tier |
+| Mutating MCP tools (e.g. GitHub writes)                    | Denied                                                                                                                    |
+| Everything else                                            | Allowed                                                                                                                   |
 
 **Orchestrator mode reuses this table.** When the session is marked as the orchestrator (`orchestrator_mode` /
 `MODEL_TIER_ORCHESTRATOR=on`) and the main loop is not premium, the same denials apply with two differences: tools
@@ -376,10 +376,12 @@ orchestrator's work product; and `Agent` spawns are not gated at all, because in
 session already runs on while an explicit premium pin stays the same deliberate escalation it is for everyone else.
 
 **The `Agent` check matters more than it looks.** A subagent's model defaults to `inherit`, so a Fable session that
-spawns a general-purpose agent runs that agent _on Fable_ — the most expensive possible way to grep. The guard accepts
-an `Agent` call only when the model is pinned: an explicit non-premium `model` parameter, or a `subagent_type` whose
-definition file pins one. `Explore` is allowed unpinned because Claude Code caps it at Opus on the Claude API. `fork` is
-denied — forks always inherit the parent model.
+spawns a general-purpose agent runs that agent _on Fable_ — the most expensive possible way to grep. The guard accepts a
+spawn only when the model cannot be inherited by accident: an explicit `model` parameter — a premium pin included,
+because an explicit pin is a deliberate escalation, the same one `senior-developer`'s definition-file pin makes — or a
+`subagent_type` whose definition file pins a model of its own. `Explore` is allowed unpinned because Claude Code caps it
+at Opus on the Claude API. `fork` is denied — forks always inherit the parent model. Builds that name the spawn tool
+`Task` are gated identically.
 
 **`write_allowed` globs are repo-relative, and containment is checked first.** A path is resolved (following symlinks)
 and rejected outright if it lands outside the project root, before any glob is matched. This is not belt-and-braces:
@@ -405,12 +407,11 @@ read when PyYAML happens to be installed).
 | `write_allowed`              | plan, decision, and review globs (see `references/model-tier-policy.json`) | Repo-relative globs the premium tier may write (see below)                  |
 | `bash_allowed`               | `[]`                                                                       | Regexes for shell commands the premium tier may run                         |
 | `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                  | Regexes for tool names denied on the premium tier                           |
-| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                            | Regexes for the budgeted read family                                        |
+| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch\|NotebookRead)$"]`              | Regexes for the budgeted read family                                        |
 | `executor_agent`             | `"executor"`                                                               | Agent name cited in denial messages                                         |
 | `runner_agent`               | `"runner"`                                                                 | Bulk-work agent name                                                        |
 | `scout_agent`                | `"scout"`                                                                  | Read-only investigation agent name                                          |
 | `senior_agent`               | `"senior-developer"`                                                       | Premium implementation agent name                                           |
-| `advocate_agent`             | `"devils-advocate"`                                                        | Optional plan-review agent name                                             |
 
 ### Escape hatch
 

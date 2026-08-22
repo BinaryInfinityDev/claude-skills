@@ -34,7 +34,6 @@ DEFAULTS = {
     "scout_agent": "scout",
     "architect_agent": "architect",
     "senior_agent": "senior-developer",
-    "advocate_agent": "devils-advocate",
     "write_allowed": [
         ".claude/plans/**",
         "docs/plans/**",
@@ -351,7 +350,7 @@ def main():
         "acceptance criteria, and a return cap of 15 lines>)." % cfg["executor_agent"]
     )
 
-    if tool == "Agent":
+    if tool in ("Agent", "Task"):  # the subagent-spawn tool is named Task in some Claude Code builds
         # Orchestrator spawns are never gated: inheritance lands on the worker tier it already runs on, and an
         # explicit premium pin is the same deliberate escalation it is for everyone else.
         if is_premium:
@@ -408,9 +407,11 @@ def main():
         )
 
     budget = int(cfg.get("read_budget") or 0)
-    if budget > 0 and matches_any(cfg["research_tools_allowed"], tool):
+    turn_key = payload.get("prompt_id")
+    # No prompt_id means turns cannot be told apart, and a session-keyed counter would never reset — the budget would
+    # lock reads out for the whole session after 8 calls. Fail open instead, like every other degraded input here.
+    if budget > 0 and turn_key and matches_any(cfg["research_tools_allowed"], tool):
         session_key = payload.get("session_id") or "session"
-        turn_key = payload.get("prompt_id") or session_key
         count = bump_read_count(session_key, turn_key, payload.get("tool_use_id"))
         if count > budget:
             scarcity = (

@@ -89,6 +89,10 @@ def turn_number(session_id, anchor, dedupe_key):
     Returns None when this is a duplicate firing of an event already handled. If the policy is installed at both user
     and project scope, two copies of this hook run per event; without the check they would inject the reminder twice
     and advance the counter at twice the rate, so the full text would land every 5 turns instead of every 10.
+
+    A duplicate is recognized by the *other copy's* script path, not by timing alone: without a prompt_id every
+    UserPromptSubmit shares one dedupe key, and a timing-only check would swallow real turns arriving inside the
+    window — no reminder, and a stalled counter. The same copy firing again is always a new event.
     """
     path = os.path.join(tempfile.gettempdir(), "claude-model-tier-ctx-%s.json" % re.sub(r"\W", "", session_id)[:64])
     state = {}
@@ -98,13 +102,18 @@ def turn_number(session_id, anchor, dedupe_key):
         pass
 
     now = time.time()
-    if state.get("key") == dedupe_key and now - float(state.get("ts") or 0) < DEDUPE_WINDOW_SECONDS:
-        return None
+    script = os.path.abspath(__file__)
+    if (
+        state.get("key") == dedupe_key
+        and state.get("script") not in (None, script)
+        and now - float(state.get("ts") or 0) < DEDUPE_WINDOW_SECONDS
+    ):
+        return None  # the other installed copy already injected for this event
 
     count = 1 if anchor else int(state.get("turns", 0)) + 1
     try:
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump({"turns": count, "key": dedupe_key, "ts": now}, fh)
+            json.dump({"turns": count, "key": dedupe_key, "ts": now, "script": script}, fh)
     except Exception:
         pass
     return count
