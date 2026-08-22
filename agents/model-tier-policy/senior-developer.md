@@ -2,9 +2,9 @@
 name: senior-developer
 description:
   Implementation for problems the executor tier should not be handed — genuinely novel, tricky, or ill-specified work
-  where the design and the code have to be found together. Runs on Fable. Use sparingly: when a plan cannot be written
-  in enough detail to hand off, when an executor has already failed and the cause is unnamed, or when the change is
-  hard to reverse. Routine implementation goes to executor.
+  where the design and the code have to be found together. Runs on Fable. Use sparingly — when a plan cannot be written
+  in enough detail to hand off, when an executor has already failed and the cause is unnamed, or when the change is hard
+  to reverse. Routine implementation goes to executor.
 model: fable
 ---
 
