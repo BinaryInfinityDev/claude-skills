@@ -39,16 +39,17 @@ the code, that is a `scout` brief, not a read.
 
 ## The dispatch table
 
-| Work                                            | Send                                                            |
-| ----------------------------------------------- | --------------------------------------------------------------- |
-| A decision — architecture, trade-off, interface | `architect` (Fable, read-only) — returns the call, not code     |
-| Stress-testing a plan before it is built        | `devils-advocate` (Opus, read-only) — optional, for risky plans |
-| Implementation with a plan                      | `executor` (Opus) — the default worker                          |
-| Implementation too entangled to plan            | `senior-developer` (Fable) — rare and deliberate                |
-| A question about the code                       | `scout` (Opus, read-only)                                       |
-| Bulk mechanical sweeps                          | `runner` (Sonnet)                                               |
-| A heavy build or test run                       | `build-runner` (Sonnet) — one at a time, in its own worktree    |
-| Diagnosing a failed build from its log          | `build-analyst` (Haiku) — hand it the path                      |
+| Work                                            | Send                                                                                  |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------- |
+| A decision — architecture, trade-off, interface | `architect` (Fable, read-only) — returns the call, not code                           |
+| Stress-testing a plan before it is built        | `devils-advocate` (Opus, read-only) — optional, for risky plans                       |
+| Implementation with a plan                      | `executor` (Opus) — the default worker                                                |
+| Implementation too entangled to plan            | `senior-developer` (Fable) — rare and deliberate                                      |
+| A question about the code                       | `scout` (Opus, read-only)                                                             |
+| Bulk mechanical sweeps                          | `runner` (Sonnet)                                                                     |
+| A heavy build or test run                       | `build-runner` (Sonnet) — one at a time, in its own worktree                          |
+| Diagnosing a failed build from its log          | `build-analyst` (Haiku) — hand it the path                                            |
+| Reviewing a proven diff                         | `code-reviewer` — Fable pin for the first pass per PR, `model: "opus"` for follow-ups |
 
 Always pin the model when you spawn (`Agent(subagent_type="executor", model="opus", …)`). Every brief carries the goal,
 the plan file path, scope, acceptance criteria, and a return cap ("at most 15 lines — what changed (file:line), what you
@@ -57,9 +58,11 @@ parallel; corrections go back out as new briefs.
 
 ## The loop per ticket
 
-Decompose → write the plan file → (stress-test if risky) → dispatch implementation → have `build-runner` prove it →
-review the capped reports and decide: accept, correct, or re-plan → update and close the ticket. The ticket is not done
-until its acceptance criteria are verified by someone other than you asserting it.
+Decompose → write the plan file → (stress-test if risky) → dispatch implementation → have `build-runner` prove it → send
+`code-reviewer` the green diff before the PR is marked ready (persist its findings under `.claude/reviews/` and hand
+that path to any follow-up review) → review the capped reports and decide: accept, correct, or re-plan → update and
+close the ticket. The ticket is not done until its acceptance criteria are verified by someone other than you asserting
+it.
 
 ## If you cannot spawn agents
 

@@ -26,7 +26,7 @@ that enforce the split mechanically so the working model cannot quietly drift ba
 
 ## The roles
 
-Seven roles, each pinned to a model. Whoever holds the session's main loop coordinates — the orchestrator (Opus) in the
+Eight roles, each pinned to a model. Whoever holds the session's main loop coordinates — the orchestrator (Opus) in the
 recommended topology, or the architect (Fable) in a premium-led session; the rest ship as subagents to delegate to.
 
 | Role                       | Agent              | Model                               | Owns                                                                                                                |
@@ -35,6 +35,7 @@ recommended topology, or the architect (Fable) in a premium-led session; the res
 | **Architect** (premium)    | `architect`        | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review                    |
 | **Senior developer**       | `senior-developer` | Fable 5 (`claude-fable-5`)          | Tricky or novel implementation where design and code must be found together                                         |
 | **Executor** (default)     | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation: edits, refactors, tests, builds, git, debugging                                                 |
+| **Code reviewer** (gate)   | `code-reviewer`    | Fable 5 first pass, Opus follow-ups | Adversarial read of the green diff before the PR is marked ready: verdict plus ranked findings, read-only           |
 | **Scout** (research)       | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how something works, where it lives, why it breaks, what the blast radius is                         |
 | **Devil's advocate** (opt) | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Adversarial review of a plan before it is built: ranked objections and a verdict                                    |
 | **Runner** (bulk)          | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | High-volume mechanical work — repetitive renames, formatting sweeps, boilerplate; heavy builds go to `build-runner` |
@@ -60,6 +61,15 @@ scout's job — it reads in its own context and returns findings, so the premium
 or built on an assumption you have not tested. Skip it for routine work — a critic invoked on everything gets ignored on
 the thing that mattered. It runs on Opus because it is a check, not a second architect; pass `model: "fable"` explicitly
 on the rare decision worth two premium opinions.
+
+**The code reviewer reads the diff after the build proves it.** The full flow is
+`plan → devils-advocate (optional) → executor / senior-developer → build-runner → code-reviewer → PR ready`, so a
+premium review is never spent on a diff that does not build. Its model is adjustable by convention: the agent pins Fable
+for the once-per-PR pass before marking ready, and follow-up re-reviews after fixes are spawned with `model: "opus"`
+plus the previous findings — persist review returns under `.claude/reviews/` (in `write_allowed` for exactly this) and
+the reviewer settles each prior finding, fixed or open, before hunting new ones. It never fixes; findings route back
+through the caller to `executor`, or `senior-developer` when a finding reveals entanglement. Trivial changes may skip it
+the way routine plans skip the devil's advocate.
 
 **Specialists sit beside the roles, not among them.** Two ship with the policy, and they split running from diagnosing
 so each stays narrow:
@@ -202,8 +212,8 @@ the editor yourself.
 A short, deliberate whitelist:
 
 - Think, plan, decide, review
-- Write plan and decision files (`.claude/plans/**`, `docs/plans/**`, `**/*.plan.md`, `.claude/decisions/**`,
-  `decisions/**`)
+- Write plan, decision, and review files (`.claude/plans/**`, `docs/plans/**`, `**/*.plan.md`, `.claude/decisions/**`,
+  `decisions/**`, `.claude/reviews/**`)
 - A small orientation budget of reads/greps — **8 calls per turn by default**, enforced by the hook. Past that, send a
   `scout`. The budget exists so you can glance at one or two key files, not so you can survey the repo.
 - Talk to the user, ask clarifying questions, spawn subagents
@@ -287,6 +297,7 @@ The installer is idempotent and reports what it changed. It writes:
 | `.claude/agents/senior-developer.md`                | Fable, writes code — for novel or tightly coupled implementation                     |
 | `.claude/agents/build-analyst.md`                   | Haiku, read-only — failed-build log triage from a path                               |
 | `.claude/agents/build-runner.md`                    | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged       |
+| `.claude/agents/code-reviewer.md`                   | Fable first pass / Opus follow-ups, read-only — adversarial review of the green diff |
 | `.claude/agents/devils-advocate.md`                 | Opus, read-only — optional adversarial review of a plan before it is built           |
 | `.claude/hooks/model_tier_guard.py`                 | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
 | `.claude/hooks/model_tier_context.py`               | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
@@ -383,23 +394,23 @@ sanction writes anywhere on the filesystem. An absolute glob will therefore neve
 `.claude/model-tier-policy.json` (the hooks are dependency-free and read JSON; `.claude/model-tier-policy.yaml` is also
 read when PyYAML happens to be installed).
 
-| Key                          | Default                                                                                         | Purpose                                                                     |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `enabled`                    | `true`                                                                                          | Master switch — `false` disables both hooks entirely                        |
-| `premium_model_pattern`      | `"fable"`                                                                                       | Case-insensitive regex matched against the live model ID                    |
-| `read_budget`                | `8`                                                                                             | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
-| `reminder_interval`          | `10`                                                                                            | Turns between full policy re-injections; `1` sends it every turn            |
-| `orchestrator_mode`          | `false`                                                                                         | Treat non-premium main-loop sessions as the orchestrator (see Topologies)   |
-| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`                          | Regexes for mutating tools the orchestrator may still use (tickets)         |
-| `write_allowed`              | `[".claude/plans/**", "docs/plans/**", "**/*.plan.md", ".claude/decisions/**", "decisions/**"]` | Repo-relative globs the premium tier may write (see below)                  |
-| `bash_allowed`               | `[]`                                                                                            | Regexes for shell commands the premium tier may run                         |
-| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                                       | Regexes for tool names denied on the premium tier                           |
-| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                                                 | Regexes for the budgeted read family                                        |
-| `executor_agent`             | `"executor"`                                                                                    | Agent name cited in denial messages                                         |
-| `runner_agent`               | `"runner"`                                                                                      | Bulk-work agent name                                                        |
-| `scout_agent`                | `"scout"`                                                                                       | Read-only investigation agent name                                          |
-| `senior_agent`               | `"senior-developer"`                                                                            | Premium implementation agent name                                           |
-| `advocate_agent`             | `"devils-advocate"`                                                                             | Optional plan-review agent name                                             |
+| Key                          | Default                                                                    | Purpose                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `enabled`                    | `true`                                                                     | Master switch — `false` disables both hooks entirely                        |
+| `premium_model_pattern`      | `"fable"`                                                                  | Case-insensitive regex matched against the live model ID                    |
+| `read_budget`                | `8`                                                                        | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
+| `reminder_interval`          | `10`                                                                       | Turns between full policy re-injections; `1` sends it every turn            |
+| `orchestrator_mode`          | `false`                                                                    | Treat non-premium main-loop sessions as the orchestrator (see Topologies)   |
+| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`     | Regexes for mutating tools the orchestrator may still use (tickets)         |
+| `write_allowed`              | plan, decision, and review globs (see `references/model-tier-policy.json`) | Repo-relative globs the premium tier may write (see below)                  |
+| `bash_allowed`               | `[]`                                                                       | Regexes for shell commands the premium tier may run                         |
+| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                  | Regexes for tool names denied on the premium tier                           |
+| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch)$"]`                            | Regexes for the budgeted read family                                        |
+| `executor_agent`             | `"executor"`                                                               | Agent name cited in denial messages                                         |
+| `runner_agent`               | `"runner"`                                                                 | Bulk-work agent name                                                        |
+| `scout_agent`                | `"scout"`                                                                  | Read-only investigation agent name                                          |
+| `senior_agent`               | `"senior-developer"`                                                       | Premium implementation agent name                                           |
+| `advocate_agent`             | `"devils-advocate"`                                                        | Optional plan-review agent name                                             |
 
 ### Escape hatch
 

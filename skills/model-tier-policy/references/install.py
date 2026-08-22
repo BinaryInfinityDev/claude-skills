@@ -35,6 +35,7 @@ FILES = [
 AGENT_FILES = [
     ("build-analyst.md", "agents/build-analyst.md"),
     ("build-runner.md", "agents/build-runner.md"),
+    ("code-reviewer.md", "agents/code-reviewer.md"),
     ("executor.md", "agents/executor.md"),
     ("orchestrator.md", "agents/orchestrator.md"),
     ("runner.md", "agents/runner.md"),

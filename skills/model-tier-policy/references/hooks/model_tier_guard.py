@@ -41,6 +41,7 @@ DEFAULTS = {
         "**/*.plan.md",
         ".claude/decisions/**",
         "decisions/**",
+        ".claude/reviews/**",
     ],
     "bash_allowed": [],
     "research_tools_allowed": [r"^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
@@ -368,8 +369,8 @@ def main():
             if path_allowed(root, target, cfg["write_allowed"]):
                 allow()
             deny(
-                "Model tier policy: %s is procedural and you are %s.\n%s\nYou may write plan and decision files "
-                "directly (%s) — put the plan on disk and hand the executor its path."
+                "Model tier policy: %s is procedural and you are %s.\n%s\nYou may write plan, decision, and review "
+                "files directly (%s) — put the plan on disk and hand the executor its path."
                 % (tool, role, delegate_hint, ", ".join(cfg["write_allowed"]))
             )
 

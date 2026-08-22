@@ -18,7 +18,8 @@
     "docs/plans/**",
     "**/*.plan.md",
     ".claude/decisions/**",
-    "decisions/**"
+    "decisions/**",
+    ".claude/reviews/**"
   ],
   "bash_allowed": [],
   "research_tools_allowed": [

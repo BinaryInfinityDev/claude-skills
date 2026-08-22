@@ -1,6 +1,6 @@
 # Model tier policy
 
-Work is split by model tier across seven roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
+Work is split by model tier across eight roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
 
 | Role                 | Agent              | Model                               | Owns                                                                                                |
 | -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -8,6 +8,7 @@ Work is split by model tier across seven roles. This is a hard rule, enforced by
 | **Architect**        | `architect`        | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review                       |
 | **Senior developer** | `senior-developer` | Fable 5 (`claude-fable-5`)          | Implementation of tricky or novel work — where design and code must be found together               |
 | **Executor**         | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**                               |
+| **Code reviewer**    | `code-reviewer`    | Fable 5 first pass, Opus follow-ups | Adversarial read of the green diff before the PR is marked ready — verdict + findings, read-only    |
 | **Scout**            | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius                        |
 | **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict                    |
 | **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work — repetitive edits, formatting, boilerplate; heavy builds go to `build-runner` |
@@ -38,9 +39,9 @@ Do only this: think, plan, decide, review, delegate, talk to the user.
 **Never** paste file contents into a brief — point at paths. **Never** read a wall of text a subagent returned; re-issue
 with a tighter cap instead.
 
-You may write plan and decision files, and spend a small orientation budget of reads (8 per turn, hook-enforced). Past
-that, send a `scout`. Edits, Bash, git, and workflows are denied — the denial message tells you how to re-issue as a
-delegation.
+You may write plan, decision, and review files, and spend a small orientation budget of reads (8 per turn,
+hook-enforced). Past that, send a `scout`. Edits, Bash, git, and workflows are denied — the denial message tells you how
+to re-issue as a delegation.
 
 Spawning subagents: **always pin the `model` explicitly.** A subagent's model defaults to `inherit`, so an unpinned
 agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin a
@@ -87,6 +88,9 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
    known-cheap checks any agent may run in-tree.
 8. A failed build is diagnosed from its log: hand `build-analyst` (Haiku 4.5) the log path — do not re-run to re-see
    output, and never paste a log into premium context.
+9. A non-trivial diff gets a `code-reviewer` pass after the build is green and before the PR is marked ready — its Fable
+   pin covers the first pass per PR; follow-ups pass `model: "opus"` plus the previous findings (persisted under
+   `.claude/reviews/`). It returns a verdict and findings; the caller routes fixes.
 
 ## Escape hatch
 
