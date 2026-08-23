@@ -59,6 +59,9 @@ does not install them into its own `.claude/`.
   category directory.
 - An agent file carries only the frontmatter Claude Code's subagent format needs — `name`, `description`, `model`, and
   `tools` where the role is restricted. Nothing else; catalog metadata lives in the README table.
+- Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is
+  the signal installed copies use to know an update exists. Validate with `claude plugin validate .` (marketplace) and
+  `claude plugin validate ./plugins/<name>` before merging.
 
 ## Adding a new skill
 

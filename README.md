@@ -1,7 +1,35 @@
 # Claude Skills
 
 A collection of reusable [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for git workflows,
-artifact management, and decision recording.
+artifact management, and decision recording — published as a **plugin marketplace**, so installs get real updates
+instead of copy-and-forget.
+
+## Installing from the marketplace — the recommended path
+
+```
+/plugin marketplace add BinaryInfinityDev/claude-skills
+/plugin install model-tier-policy@claude-skills
+```
+
+| Plugin               | Contents                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| `model-tier-policy`  | The tier-policy skill, ten pinned-model agents, and both enforcement hooks with their reminder text |
+| `git-workflow`       | `start-session`, `end-session`                                                                      |
+| `project-management` | `ingest-artifact`, `record-decision`                                                                |
+| `time-tracking`      | `session-timelog`, `time-report`                                                                    |
+
+Installed plugins are versioned (`plugin.json` semver) and update through the marketplace: third-party marketplaces do
+not auto-update by default, so either toggle auto-update for `claude-skills` in `/plugin` → Marketplaces or pull updates
+with `claude plugin marketplace update claude-skills`. Plugin skills are invoked as `/plugin-name:skill-name` (e.g.
+`/git-workflow:start-session`).
+
+One deliberate exception: **rules** (always-loaded instruction files) have no plugin component, so they still install by
+copy or symlink as documented below — and `model-tier-policy`'s per-repo rules file and config are laid down by its
+bundled installer, which stamps the plugin version so the skill can flag drift after an update. Everything else a plugin
+carries — skills, agents, hooks, the hooks' injected wording — updates with the plugin, nothing to re-run.
+
+Copying files by hand still works everywhere and is documented per section below; it just has no update channel beyond
+`git pull` and re-copy.
 
 ## Skills
 

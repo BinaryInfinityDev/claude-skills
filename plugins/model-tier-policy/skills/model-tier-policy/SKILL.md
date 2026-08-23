@@ -254,6 +254,39 @@ obvious convention to follow, or work that is just tedious.
 
 ## Installation
 
+### As a plugin — the recommended path
+
+The policy ships as the `model-tier-policy` plugin of the `claude-skills` marketplace:
+
+```
+/plugin marketplace add BinaryInfinityDev/claude-skills
+/plugin install model-tier-policy@claude-skills
+```
+
+That activates the skill, all ten agents, and both hooks immediately — enforcement and the reminder included, with the
+reminder's wording loaded from context fragments inside the plugin, so **plugin updates change what the hooks say with
+no further steps**. Third-party marketplaces do not auto-update by default: toggle auto-update per marketplace in
+`/plugin` → Marketplaces, or pull updates by hand with `claude plugin marketplace update claude-skills`.
+
+Two per-repo pieces are file-shaped and cannot ride a plugin — the always-loaded rules files and the
+`.claude/model-tier-policy.json` config. Run the bundled installer once per repo to lay those down (it also stamps the
+installed plugin version). It works from a `claude-skills` clone or from the installed plugin's own directory under
+`~/.claude/plugins/cache/claude-skills/model-tier-policy/<version>/`:
+
+```bash
+python3 <plugin-dir>/skills/model-tier-policy/references/install.py --target /path/to/repo
+```
+
+With the plugin active, the hook and agent copies the installer also writes are redundant — the plugin already serves
+them — but harmless: the hooks de-duplicate a doubled event by script path and tool call, so cadence and the read budget
+stay correct. The live plugin copy always wins on freshness.
+
+When this skill is invoked in a repo that has a `.claude/model-tier-policy.version` stamp, compare it against the
+installed plugin's current `.claude-plugin/plugin.json` version; if they differ, say so and offer to re-run the
+installer so the file-shaped pieces catch up. The hooks and agents never drift — the plugin serves them live.
+
+### By hand — without the marketplace
+
 **Copying the skill directory somewhere does not install the policy.** A skill loads on demand and activates nothing;
 the files under `references/` are inert wherever the skill lives. Enforcement comes from `install.py`, which copies
 those files to the paths Claude Code actually reads. Both steps are useful and they are independent:
@@ -302,7 +335,9 @@ The installer is idempotent and reports what it changed. It writes:
 | `.claude/agents/devils-advocate.md`                 | Opus, read-only — optional adversarial review of a plan before it is built           |
 | `.claude/hooks/model_tier_guard.py`                 | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
 | `.claude/hooks/model_tier_context.py`               | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
+| `.claude/hooks/context/*.md`                        | The six reminder fragments the context hook loads (per tier, full and brief)         |
 | `.claude/model-tier-policy.json`                    | Config (see below)                                                                   |
+| `.claude/model-tier-policy.version`                 | Provenance stamp: plugin version and source of this install, for drift detection     |
 | `.claude/settings.json`                             | Hook wiring, merged into whatever is already there                                   |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
@@ -334,7 +369,10 @@ priority as `.claude/CLAUDE.md`, and project-root rules are re-injected after co
 
 **Layer 2 — periodic re-injection.** `model_tier_context.py` runs on `UserPromptSubmit` and appends a reminder of the
 active tier and its rules, so the policy is never far from the end of the context window no matter how long the session
-runs or how many compactions it survives.
+runs or how many compactions it survives. The hook is only a loader: the reminder text lives in `context/*.md` beside
+the script, so when the policy runs as a plugin, wording updates arrive with plugin updates and there is no second copy
+of the text to drift from the rules file. A missing fragment degrades to a one-line pointer at the rules file, never to
+silence.
 
 Injected context attaches to the turn's user message and stays in the transcript, so it **accumulates** — a full
 reminder every turn would cost ~250 tokens per turn cumulatively, which in a premium session spends exactly the budget

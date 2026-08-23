@@ -13,6 +13,7 @@ Idempotent: re-running updates the shipped files and leaves your config and any 
 """
 
 import argparse
+import datetime
 import json
 import os
 import shutil
@@ -58,6 +59,18 @@ AGENT_FILES = [
     ("devils-advocate.md", "agents/devils-advocate.md"),
 ]
 CONFIG = ("model-tier-policy.json", "model-tier-policy.json")
+# Provenance stamp: which plugin version these installed files came from, so the skill can flag drift after a plugin
+# update and offer a re-run. Deliberately a text file, not part of the user-owned config.
+STAMP = "model-tier-policy.version"
+
+
+def plugin_version():
+    """The version from the plugin manifest this installer ships inside, or 'unversioned' for a bare checkout."""
+    try:
+        with open(os.path.join(PLUGIN_ROOT, ".claude-plugin", "plugin.json"), encoding="utf-8") as fh:
+            return json.load(fh).get("version") or "unversioned"
+    except Exception:
+        return "unversioned"
 # Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
 LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
@@ -176,6 +189,8 @@ def main():
             print("  %-6s %s (superseded by the model-tier-policy name)" % (verb, old))
     for item in plan:
         print("  %-6s %s" % (item[0], item[1]))
+    stamp_path = os.path.join(claude, STAMP)
+    print("  %-6s %s (%s)" % ("update" if os.path.exists(stamp_path) else "create", stamp_path, plugin_version()))
     print("  %-6s %s (%d hook entr%s added)" % ("merge", settings_path, added, "y" if added == 1 else "ies"))
 
     if args.dry_run:
@@ -196,6 +211,17 @@ def main():
         shutil.copyfile(src_path, dest_path)
         if dest_path.endswith(".py"):
             os.chmod(dest_path, 0o755)
+
+    os.makedirs(claude, exist_ok=True)
+    with open(stamp_path, "w", encoding="utf-8") as fh:
+        fh.write(
+            "model-tier-policy %s\nsource: %s\ninstalled: %s\n"
+            % (
+                plugin_version(),
+                PLUGIN_ROOT,
+                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            )
+        )
 
     if added:
         os.makedirs(claude, exist_ok=True)
