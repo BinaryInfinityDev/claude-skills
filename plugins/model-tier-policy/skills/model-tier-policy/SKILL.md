@@ -277,13 +277,18 @@ installed plugin version). It works from a `claude-skills` clone or from the ins
 python3 <plugin-dir>/skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
-With the plugin active, the hook and agent copies the installer also writes are redundant — the plugin already serves
-them — but harmless: the hooks de-duplicate a doubled event by script path and tool call, so cadence and the read budget
-stay correct. The live plugin copy always wins on freshness.
+Run from an installed plugin's directory, the installer detects plugin mode and does a **files-only** install: it lays
+down the rules, config, and stamp, skips its own hook and agent copies, and removes any it finds from an earlier hand
+install. That removal is the point, not tidiness — local copies do not defer to the plugin: a project-scope agent file
+_shadows_ the plugin's on a name collision, and a doubled reminder hook injects whichever copy fires first, so stale
+copies would keep speaking for the policy after a plugin update. (`--files-only` requests the same from a checkout;
+`--full` forces the copy-everything install anyway. The hooks de-duplicate a doubled event, so the forced overlap costs
+waste, not correctness.)
 
 When this skill is invoked in a repo that has a `.claude/model-tier-policy.version` stamp, compare it against the
 installed plugin's current `.claude-plugin/plugin.json` version; if they differ, say so and offer to re-run the
-installer so the file-shaped pieces catch up. The hooks and agents never drift — the plugin serves them live.
+installer so the file-shaped pieces catch up. In this setup those files are the only thing that can drift — with no
+local copies left, the plugin serves the hooks and agents live.
 
 ### By hand — without the marketplace
 

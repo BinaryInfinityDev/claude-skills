@@ -25,8 +25,10 @@ with `claude plugin marketplace update claude-skills`. Plugin skills are invoked
 
 One deliberate exception: **rules** (always-loaded instruction files) have no plugin component, so they still install by
 copy or symlink as documented below — and `model-tier-policy`'s per-repo rules file and config are laid down by its
-bundled installer, which stamps the plugin version so the skill can flag drift after an update. Everything else a plugin
-carries — skills, agents, hooks, the hooks' injected wording — updates with the plugin, nothing to re-run.
+bundled installer, which stamps the plugin version so the skill can flag drift after an update. Run from the installed
+plugin, the installer lays down only those pieces and clears any hook or agent copies an earlier hand install left —
+local copies shadow the plugin rather than defer to it, so removing them is what keeps updates live. Everything else a
+plugin carries — skills, agents, hooks, the hooks' injected wording — then updates with the plugin, nothing to re-run.
 
 Copying files by hand still works everywhere and is documented per section below; it just has no update channel beyond
 `git pull` and re-copy.

@@ -67,6 +67,10 @@ def turn_number(session_id, anchor, dedupe_key):
     A duplicate is recognized by the *other copy's* script path, not by timing alone: without a prompt_id every
     UserPromptSubmit shares one dedupe key, and a timing-only check would swallow real turns arriving inside the
     window — no reminder, and a stalled counter. The same copy firing again is always a new event.
+
+    This read-then-write is not atomic: two copies firing concurrently can both inject once for that event. The cost
+    is one duplicated reminder, never a missed one, and the doubled-copy configuration itself is what the installer's
+    files-only mode removes — a plugin install plus a hand install is transitional, not steady state.
     """
     path = os.path.join(tempfile.gettempdir(), "claude-model-tier-ctx-%s.json" % re.sub(r"\W", "", session_id)[:64])
     state = {}

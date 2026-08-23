@@ -104,6 +104,30 @@ def merge_hooks(settings, snippet):
     return added
 
 
+def strip_policy_hooks(settings):
+    """Remove this policy's hook entries from settings, leaving everyone else's alone. Returns how many dropped."""
+    removed = 0
+    hooks = settings.get("hooks") or {}
+    for event in list(hooks.keys()):
+        entries = hooks[event]
+        if not isinstance(entries, list):
+            continue
+        kept = []
+        for entry in entries:
+            commands = hook_command(entry if isinstance(entry, dict) else {})
+            if any("model_tier_guard.py" in c or "model_tier_context.py" in c for c in commands):
+                removed += 1
+            else:
+                kept.append(entry)
+        if kept:
+            hooks[event] = kept
+        else:
+            del hooks[event]
+    if not hooks and "hooks" in settings:
+        del settings["hooks"]
+    return removed
+
+
 def policy_installed(root):
     """True when a settings.json under root already wires up either of our hooks."""
     settings = load_json(os.path.join(root, ".claude", "settings.json"))
@@ -123,7 +147,21 @@ def main():
     parser.add_argument("--user", action="store_true", help="install into ~/.claude instead of the repo")
     parser.add_argument("--force", action="store_true", help="overwrite an existing model-tier-policy.json")
     parser.add_argument("--dry-run", action="store_true", help="report what would change without writing")
+    parser.add_argument(
+        "--files-only",
+        action="store_true",
+        help="install only the pieces the plugin cannot serve (rules, config, stamp) and remove any hook/agent "
+        "copies from an earlier full install — the default when running from an installed plugin",
+    )
+    parser.add_argument("--full", action="store_true", help="copy hooks and agents even when running from a plugin")
     args = parser.parse_args()
+
+    # Local copies do not defer to the plugin: a project-scope agent file shadows the plugin's on a name collision,
+    # and a doubled reminder hook injects whichever copy fires first. So when this installer runs from inside an
+    # installed plugin, the plugin is serving the hooks and agents already, and the right install is files-only —
+    # plus removing any copies an earlier hand-install left to go stale.
+    in_plugin_cache = (os.sep + os.path.join("plugins", "cache") + os.sep) in PLUGIN_ROOT
+    files_only = args.files_only or (in_plugin_cache and not args.full)
 
     root = os.path.expanduser("~") if args.user else os.path.abspath(args.target)
     if not os.path.isdir(root):
@@ -154,12 +192,19 @@ def main():
         migrations.append(("rename", legacy_config, os.path.join(claude, CONFIG[1])))
     legacy_rule = os.path.join(claude, LEGACY_RULE)
     if os.path.exists(legacy_rule):
-        migrations.append(("remove", legacy_rule, None))
+        migrations.append(("remove", legacy_rule, "superseded by the model-tier-policy name"))
 
     plan = []
     sources = [(os.path.join(HERE, src), dest) for src, dest in FILES + [CONFIG]]
-    sources += [(os.path.join(HOOKS_SRC, src), dest) for src, dest in HOOK_FILES]
-    sources += [(os.path.join(AGENTS_SRC, src), dest) for src, dest in AGENT_FILES]
+    if files_only:
+        # The plugin serves hooks and agents; copies left from an earlier full install would shadow it, so they go.
+        for _src, dest in HOOK_FILES + AGENT_FILES:
+            stale = os.path.join(claude, dest)
+            if os.path.exists(stale):
+                migrations.append(("remove", stale, "the plugin serves this now"))
+    else:
+        sources += [(os.path.join(HOOKS_SRC, src), dest) for src, dest in HOOK_FILES]
+        sources += [(os.path.join(AGENTS_SRC, src), dest) for src, dest in AGENT_FILES]
     for src_path, dest in sources:
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):
@@ -176,22 +221,36 @@ def main():
 
     settings_path = os.path.join(claude, "settings.json")
     settings = load_json(settings_path)
-    snippet = load_json(os.path.join(HERE, "settings-snippet.json"))
-    if args.user:
-        # A user-level install lives outside any one project, so $CLAUDE_PROJECT_DIR would point at the wrong tree.
-        snippet = json.loads(json.dumps(snippet).replace("$CLAUDE_PROJECT_DIR", "$HOME"))
-    added = merge_hooks(settings, snippet)
+    settings_changed = 0
+    if files_only:
+        settings_changed = strip_policy_hooks(settings)
+        settings_note = "%d hook entr%s removed — the plugin wires its own" % (
+            settings_changed,
+            "y" if settings_changed == 1 else "ies",
+        )
+    else:
+        snippet = load_json(os.path.join(HERE, "settings-snippet.json"))
+        if args.user:
+            # A user-level install lives outside any one project, so $CLAUDE_PROJECT_DIR would point at the wrong tree.
+            snippet = json.loads(json.dumps(snippet).replace("$CLAUDE_PROJECT_DIR", "$HOME"))
+        settings_changed = merge_hooks(settings, snippet)
+        settings_note = "%d hook entr%s added" % (settings_changed, "y" if settings_changed == 1 else "ies")
 
+    if files_only:
+        print(
+            "files-only install%s: the plugin serves the skill, agents, and hooks; laying down rules, config, "
+            "and the version stamp." % (" (running from an installed plugin)" if in_plugin_cache else "")
+        )
     for verb, old, new in migrations:
         if verb == "rename":
             print("  %-6s %s -> %s" % (verb, old, os.path.basename(new)))
         else:
-            print("  %-6s %s (superseded by the model-tier-policy name)" % (verb, old))
+            print("  %-6s %s (%s)" % (verb, old, new))
     for item in plan:
         print("  %-6s %s" % (item[0], item[1]))
     stamp_path = os.path.join(claude, STAMP)
     print("  %-6s %s (%s)" % ("update" if os.path.exists(stamp_path) else "create", stamp_path, plugin_version()))
-    print("  %-6s %s (%d hook entr%s added)" % ("merge", settings_path, added, "y" if added == 1 else "ies"))
+    print("  %-6s %s (%s)" % ("merge", settings_path, settings_note))
 
     if args.dry_run:
         print("\ndry run — nothing written")
@@ -202,6 +261,12 @@ def main():
             os.replace(old, new)
         else:
             os.remove(old)
+    if files_only:
+        for leftover in ("hooks/context", "hooks", "agents"):
+            try:
+                os.rmdir(os.path.join(claude, leftover))  # only if empty — a dir with anyone else's files stays
+            except OSError:
+                pass
 
     for item in plan:
         if item[0] == "keep":
@@ -223,20 +288,27 @@ def main():
             )
         )
 
-    if added:
+    if settings_changed:
         os.makedirs(claude, exist_ok=True)
         with open(settings_path, "w", encoding="utf-8") as fh:
             json.dump(settings, fh, indent=2)
             fh.write("\n")
 
-    print(
-        "\nInstalled. No session restart needed — the hooks are live on the next tool call, so a premium session will\n"
-        "be denied its next edit or build immediately. Accept the workspace trust prompt if asked.\n"
-        "The rules file loads at your next session start; until then the reminder hook carries the same policy, so\n"
-        "nothing is unenforced in the meantime.\n"
-        "Verify: ask the premium tier to run a build — it should be denied with the delegation to use instead.\n"
-        "Disable at any time with MODEL_TIER_POLICY=off or \"enabled\": false in .claude/model-tier-policy.json."
-    )
+    if files_only:
+        print(
+            "\nInstalled the file-shaped pieces; the plugin serves the skill, agents, and hooks live, so those never\n"
+            "drift. Re-run this after a plugin update to bring the rules file and config up to the new version.\n"
+            "Disable at any time with MODEL_TIER_POLICY=off or \"enabled\": false in .claude/model-tier-policy.json."
+        )
+    else:
+        print(
+            "\nInstalled. No session restart needed — the hooks are live on the next tool call, so a premium session "
+            "will\nbe denied its next edit or build immediately. Accept the workspace trust prompt if asked.\n"
+            "The rules file loads at your next session start; until then the reminder hook carries the same policy, "
+            "so\nnothing is unenforced in the meantime.\n"
+            "Verify: ask the premium tier to run a build — it should be denied with the delegation to use instead.\n"
+            "Disable at any time with MODEL_TIER_POLICY=off or \"enabled\": false in .claude/model-tier-policy.json."
+        )
 
 
 if __name__ == "__main__":
