@@ -60,8 +60,10 @@ does not install them into its own `.claude/`.
 - An agent file carries only the frontmatter Claude Code's subagent format needs — `name`, `description`, `model`, and
   `tools` where the role is restricted. Nothing else; catalog metadata lives in the README table.
 - Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is
-  the signal installed copies use to know an update exists. Validate with `claude plugin validate .` (marketplace) and
-  `claude plugin validate ./plugins/<name>` before merging.
+  the signal installed copies use to know an update exists, and `claude plugin update` reports "already at the latest
+  version" over a stale cache when it is skipped. The pre-commit hook (`scripts/check-plugin-versions.sh`) blocks a
+  commit that changes a plugin's content without changing its version. Validate with `claude plugin validate .`
+  (marketplace) and `claude plugin validate ./plugins/<name>` before merging.
 
 ## Adding a new skill
 

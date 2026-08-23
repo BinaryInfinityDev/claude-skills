@@ -9,7 +9,8 @@ Idempotent: re-running updates the shipped files and leaves your config and any 
     python3 install.py --target /path/to/repo [--user] [--force] [--dry-run]
 
     --user   install agents and hooks under ~/.claude instead (applies to every repo)
-    --force  overwrite .claude/model-tier-policy.json, which is otherwise preserved once created
+    --force  reset .claude/model-tier-policy.json to shipped defaults (a .bak is written first); plain re-runs
+             only add newly shipped keys and never touch values you set
 """
 
 import argparse
@@ -162,7 +163,12 @@ def main():
     parser = argparse.ArgumentParser(description="Install the model tier policy.")
     parser.add_argument("--target", default=os.getcwd(), help="repository root (default: cwd)")
     parser.add_argument("--user", action="store_true", help="install into ~/.claude instead of the repo")
-    parser.add_argument("--force", action="store_true", help="overwrite an existing model-tier-policy.json")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="reset model-tier-policy.json to shipped defaults, backing the old file up first — without this, "
+        "re-runs only add newly shipped keys and never touch values you set",
+    )
     parser.add_argument("--dry-run", action="store_true", help="report what would change without writing")
     parser.add_argument(
         "--files-only",
@@ -212,7 +218,7 @@ def main():
         migrations.append(("remove", legacy_rule, "superseded by the model-tier-policy name"))
 
     plan = []
-    sources = [(os.path.join(HERE, src), dest) for src, dest in FILES + [CONFIG]]
+    sources = [(os.path.join(HERE, src), dest) for src, dest in FILES]
     if files_only:
         # The plugin serves hooks and agents; copies left from an earlier full install would shadow it, so they go.
         for _src, dest in HOOK_FILES + AGENT_FILES:
@@ -226,15 +232,34 @@ def main():
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):
             sys.exit("error: missing source file %s" % src_path)
-        # A pending rename means the destination will exist by the time the copies run.
-        dest_exists = os.path.exists(dest_path) or any(
-            verb == "rename" and new == dest_path for verb, _old, new in migrations
-        )
-        if dest == CONFIG[1] and dest_exists and not args.force:
-            plan.append(("keep", dest_path))
-            continue
-        verb = "update" if dest_exists else "create"
+        verb = "update" if os.path.exists(dest_path) else "create"
         plan.append((verb, dest_path, src_path))
+
+    # The config is the user's file, not ours: re-runs only ADD newly shipped keys (so a repo picks up e.g. a new
+    # bar_command default without losing the values it set), and --force — the full reset — backs the file up and
+    # says which local values it is discarding. A silent reset of repo-specific config is how a trial site lost its
+    # bar command to a habitual --force.
+    config_src = os.path.join(HERE, CONFIG[0])
+    config_dest = os.path.join(claude, CONFIG[1])
+    shipped_cfg = load_json(config_src)
+    rename_pending = any(v == "rename" and n == config_dest for v, _o, n in migrations)
+    existing_cfg_path = config_dest if os.path.exists(config_dest) else (legacy_config if rename_pending else None)
+    if existing_cfg_path is None:
+        config_action = "create"
+        config_note = ""
+    elif args.force:
+        user_cfg = load_json(existing_cfg_path)
+        overridden = sorted(k for k in user_cfg if user_cfg[k] != shipped_cfg.get(k, object()))
+        config_action = "reset"
+        config_note = " (backup: %s.bak%s)" % (
+            os.path.basename(config_dest),
+            "; discarding local: " + ", ".join(overridden) if overridden else "",
+        )
+    else:
+        user_cfg = load_json(existing_cfg_path)
+        new_keys = [k for k in shipped_cfg if k not in user_cfg]
+        config_action = "merge" if new_keys else "keep"
+        config_note = " (new key%s: %s)" % ("" if len(new_keys) == 1 else "s", ", ".join(new_keys)) if new_keys else ""
 
     settings_path = os.path.join(claude, "settings.json")
     settings = load_json(settings_path)
@@ -265,6 +290,7 @@ def main():
             print("  %-6s %s (%s)" % (verb, old, new))
     for item in plan:
         print("  %-6s %s" % (item[0], item[1]))
+    print("  %-6s %s%s" % (config_action, config_dest, config_note))
     stamp_path = os.path.join(claude, STAMP)
     print("  %-6s %s (%s)" % ("update" if os.path.exists(stamp_path) else "create", stamp_path, plugin_version()))
     print("  %-6s %s (%s)" % ("merge", settings_path, settings_note))
@@ -293,6 +319,21 @@ def main():
         shutil.copyfile(src_path, dest_path)
         if dest_path.endswith(".py"):
             os.chmod(dest_path, 0o755)
+
+    os.makedirs(claude, exist_ok=True)
+    if config_action == "create":
+        shutil.copyfile(config_src, config_dest)
+    elif config_action == "merge":
+        merged = load_json(config_dest)  # the migration has run, so the user's file is at its current path now
+        for key, value in shipped_cfg.items():
+            if key not in merged:
+                merged[key] = value
+        with open(config_dest, "w", encoding="utf-8") as fh:
+            json.dump(merged, fh, indent=2)
+            fh.write("\n")
+    elif config_action == "reset":
+        shutil.copyfile(config_dest, config_dest + ".bak")
+        shutil.copyfile(config_src, config_dest)
 
     os.makedirs(claude, exist_ok=True)
     with open(stamp_path, "w", encoding="utf-8") as fh:

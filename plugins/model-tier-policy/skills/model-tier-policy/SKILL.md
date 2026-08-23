@@ -440,6 +440,11 @@ sanction writes anywhere on the filesystem. An absolute glob will therefore neve
 `.claude/model-tier-policy.json` (the hooks are dependency-free and read JSON; `.claude/model-tier-policy.yaml` is also
 read when PyYAML happens to be installed).
 
+The file is yours once created: installer re-runs only **add newly shipped keys** with their defaults and never touch
+values you set. `--force` is the full reset back to shipped defaults — it writes a `.bak` beside the file first and
+prints which local values it discarded, because a silent reset of repo-specific config (a `bar_command`, a widened
+allowlist) is how customization quietly disappears.
+
 | Key                          | Default                                                                    | Purpose                                                                                                            |
 | ---------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `enabled`                    | `true`                                                                     | Master switch — `false` disables both hooks entirely                                                               |
