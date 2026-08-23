@@ -340,7 +340,8 @@ Five properties matter, and the snippet below is shaped by them:
 - **Nothing on stdout.** A `SessionStart` hook's stdout is injected into the session's context. Diagnostics go to a log
   file and to stderr.
 - **Fast when there is nothing to do.** Gate on `claude plugin list`; the already-installed path costs about 0.7 s
-  against roughly 4 s for the install.
+  against roughly 4 s for the install. Match the plugin's full `name@marketplace` id rather than a substring of it, so a
+  differently-named plugin that merely contains the name cannot satisfy the gate.
 - **Remote only.** Set the marker variable in the remote environment's configuration and leave it unset locally, so the
   hook is inert on a developer machine that manages its own plugins.
 - **One source for the marketplace URL.** Read it out of `.claude/settings.json` rather than repeating it in the hook,
@@ -362,7 +363,9 @@ echo "=== $(date -Is) SessionStart in $PWD ==="
 [ "${MODEL_TIER_POLICY_AUTOINSTALL:-0}" = "1" ] || { echo "marker unset — skipping"; exit 0; }
 
 # Already there: the local case, and every session after the first in a warm container.
-if claude plugin list 2>/dev/null | grep -q 'model-tier-policy'; then
+# `claude plugin list` prints one `  > NAME@MARKETPLACE` line per plugin. Anchor the match to that whole id —
+# a bare substring match would also be satisfied by an unrelated `model-tier-policy-extras@…`.
+if claude plugin list 2>/dev/null | grep -qE '(^|[[:space:]>])model-tier-policy@claude-skills([[:space:]]|$)'; then
   echo "already installed"; exit 0
 fi
 
