@@ -4,7 +4,7 @@ description:
   Build a time-on-project report and per-day timesheet from session timelines, git commits, and PR/issue history. Use
   when the user asks how much time was spent, for a timesheet or time metrics, as part of a sprint review/sprint-end
   ritual, or on a timer/routine. Consumes the tracking branch written by the session-timelog skill.
-source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/time-report/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/plugins/time-tracking/skills/time-report/SKILL.md
 ---
 
 # Time Report

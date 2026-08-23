@@ -5,7 +5,7 @@ description:
   the thinking and planning; Opus 5 (or Sonnet 5) does everything procedural. Use when setting up or operating a session
   that must be frugal with premium-model usage limits, when the user says "Fable plans, Opus executes", asks for an
   orchestrator session, or invokes /model-tier-policy.
-source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/model-tier-policy/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/plugins/model-tier-policy/skills/model-tier-policy/SKILL.md
 ---
 
 # Model Tier Policy
@@ -258,10 +258,10 @@ obvious convention to follow, or work that is just tedious.
 the files under `references/` are inert wherever the skill lives. Enforcement comes from `install.py`, which copies
 those files to the paths Claude Code actually reads. Both steps are useful and they are independent:
 
-| Step                                                                         | Gives you                                                         |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Copy `skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement         |
-| Run `install.py --target <repo>`                                             | The rules file, the agents, and the two hooks — the actual policy |
+| Step                                                                                                   | Gives you                                                         |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Copy `plugins/model-tier-policy/skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement         |
+| Run `install.py --target <repo>`                                                                       | The rules file, the agents, and the two hooks — the actual policy |
 
 Having the skill at user level and the policy installed per repo is the expected setup: the skill copy creates nothing
 under `~/.claude/agents/`, `~/.claude/hooks/`, `~/.claude/rules/`, or `~/.claude/settings.json`, so there is exactly one
@@ -276,12 +276,13 @@ silently. The installer warns when it detects the other scope.
 Run from the repo you want the policy active in:
 
 ```bash
-python3 /path/to/claude-skills/skills/model-tier-policy/references/install.py --target /path/to/repo
+python3 /path/to/claude-skills/plugins/model-tier-policy/skills/model-tier-policy/references/install.py --target /path/to/repo
 ```
 
-Run it from a full `claude-skills` checkout. The agent definitions live in the repo's top-level
-`agents/model-tier-policy/` catalog rather than inside the skill, so a lone copy of `skills/model-tier-policy/` has
-nothing to install them from — the installer says so and exits rather than writing a half-installed policy.
+Run it from a full `model-tier-policy` plugin directory — an installed plugin or a `claude-skills` checkout. The agent
+definitions and hooks live at the plugin root (`agents/`, `hooks/`) rather than inside the skill, so a lone copy of the
+skill directory has nothing to install them from — the installer says so and exits rather than writing a half-installed
+policy.
 
 The installer is idempotent and reports what it changed. It writes:
 

@@ -3,7 +3,7 @@ name: record-decision
 description:
   Record an architecture/design decision with auto-incrementing numbering, structured sections, and index update. Use
   when the user makes or discusses a decision worth recording, or invokes /record-decision.
-source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/record-decision/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/plugins/project-management/skills/record-decision/SKILL.md
 ---
 
 # Record Decision

@@ -4,7 +4,7 @@ description:
   Ingest raw lab data (zone files, configs, exports) into the project's artifact store — write the file, update the
   catalog index. Use when the user provides raw data to archive, or invokes /ingest-artifact.
 model: haiku
-source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/ingest-artifact/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/plugins/project-management/skills/ingest-artifact/SKILL.md
 ---
 
 # Ingest Artifact

@@ -4,7 +4,7 @@ description:
   Finalize a git session branch — write a session summary, run project-specific finalization, and merge to the main
   branch with a structured commit. Use when the user says "end session", "wrap up", "session complete", or invokes
   /end-session.
-source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/end-session/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/plugins/git-workflow/skills/end-session/SKILL.md
 ---
 
 # End Session

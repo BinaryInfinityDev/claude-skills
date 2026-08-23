@@ -19,17 +19,23 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# The agent definitions are not skill-private: they live in the repo-level catalog so other skills can cite them.
-AGENTS_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "agents", "model-tier-policy"))
-# Catalog rules the policy depends on: build-runner's worktree/lock mechanics assume the session-side conventions
-# (one build at a time, the push gate) that this always-loaded rule carries.
-RULES_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "..", "rules"))
+# The plugin root carries the components that are not skill-private: agents and hooks sit beside the skill so the
+# plugin loads them natively, and this installer sources them from there for repos that install by hand instead.
+PLUGIN_ROOT = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
+AGENTS_SRC = os.path.join(PLUGIN_ROOT, "agents")
+HOOKS_SRC = os.path.join(PLUGIN_ROOT, "hooks")
 
 # (source relative to references/, destination relative to .claude/)
 FILES = [
     ("rules/model-tier-policy.md", "rules/model-tier-policy.md"),
-    ("hooks/model_tier_guard.py", "hooks/model_tier_guard.py"),
-    ("hooks/model_tier_context.py", "hooks/model_tier_context.py"),
+    # The canonical copy lives in the repo-level rules/ catalog; this one ships with the plugin so an installed
+    # plugin is self-contained. Keep the two in sync (see CLAUDE.md).
+    ("rules/build-discipline/worktree-builds.md", "rules/build-discipline/worktree-builds.md"),
+]
+# (source relative to HOOKS_SRC, destination relative to .claude/)
+HOOK_FILES = [
+    ("model_tier_guard.py", "hooks/model_tier_guard.py"),
+    ("model_tier_context.py", "hooks/model_tier_context.py"),
 ]
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [
@@ -45,10 +51,6 @@ AGENT_FILES = [
     ("devils-advocate.md", "agents/devils-advocate.md"),
 ]
 CONFIG = ("model-tier-policy.json", "model-tier-policy.json")
-# (source relative to RULES_SRC, destination relative to .claude/ — the category directory is preserved for rules)
-CATALOG_RULES = [
-    ("build-discipline/worktree-builds.md", "rules/build-discipline/worktree-builds.md"),
-]
 # Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
 LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
@@ -118,10 +120,10 @@ def main():
             % os.path.join(other, ".claude")
         )
 
-    if not os.path.isdir(AGENTS_SRC):
+    if not os.path.isdir(AGENTS_SRC) or not os.path.isdir(HOOKS_SRC):
         sys.exit(
-            "error: agent sources not found at %s — run install.py from a full claude-skills checkout "
-            "(the skill directory alone does not carry the agents)" % AGENTS_SRC
+            "error: agent or hook sources not found under %s — run install.py from a full model-tier-policy "
+            "plugin directory (the skill directory alone does not carry the agents and hooks)" % PLUGIN_ROOT
         )
 
     # Migrate installs that predate the consistent model-tier-policy naming: the config is renamed so its contents
@@ -136,8 +138,8 @@ def main():
 
     plan = []
     sources = [(os.path.join(HERE, src), dest) for src, dest in FILES + [CONFIG]]
+    sources += [(os.path.join(HOOKS_SRC, src), dest) for src, dest in HOOK_FILES]
     sources += [(os.path.join(AGENTS_SRC, src), dest) for src, dest in AGENT_FILES]
-    sources += [(os.path.join(RULES_SRC, src), dest) for src, dest in CATALOG_RULES]
     for src_path, dest in sources:
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):

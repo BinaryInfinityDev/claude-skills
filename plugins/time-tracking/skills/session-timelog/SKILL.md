@@ -4,7 +4,7 @@ description:
   Record this session's own usage as a content-free timestamp timeline and commit it to a dedicated tracking branch
   (never via a PR). Use when the user says "log session time", "record session usage", "track this session", at the end
   of a working session, or on a timer/routine. Feeds the time-report skill; keeps time data out of feature PRs.
-source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/skills/session-timelog/SKILL.md
+source: https://github.com/BinaryInfinityDev/claude-skills/blob/main/plugins/time-tracking/skills/session-timelog/SKILL.md
 ---
 
 # Session Timelog

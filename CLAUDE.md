@@ -6,21 +6,29 @@ and decision recording.
 ## Repository structure
 
 ```
+.claude-plugin/
+  marketplace.json  — the plugin marketplace manifest (name, owner, plugins[])
+plugins/
+  {plugin-name}/    — one self-contained plugin per cohesive unit
+    .claude-plugin/plugin.json — plugin manifest (name, version, description)
+    skills/{skill-name}/
+      SKILL.md      — the skill definition (frontmatter + instructions)
+      references/   — optional supporting files (templates, schemas, examples)
+    agents/
+      {agent-name}.md — model-pinned subagent definitions, flat (plugins do not read nested agent dirs)
+    hooks/
+      hooks.json    — plugin hook wiring, plus the hook scripts and their context fragments
 skills/
-  {skill-name}/
-    SKILL.md        — the skill definition (frontmatter + instructions)
-    references/     — optional supporting files (templates, schemas, examples)
+  {skill-name}/     — unpackaged skills: project-specific reference implementations only
 rules/
   {category}/
     {rule-name}.md  — an always-loaded instruction block, installed to .claude/rules/
-agents/
-  {category}/
-    {agent-name}.md — a model-pinned subagent definition, installed to .claude/agents/
 ```
 
-Each skill lives in its own directory under `skills/`. The `SKILL.md` file is the complete, self-contained skill
-definition that can be copied into any project's `.claude/skills/` directory or linked as a user-level skill in
-`~/.claude/skills/`.
+Each plugin under `plugins/` is **self-contained** — installed plugins are copied out of the repo and cannot reference
+files outside their own directory, so everything a plugin needs lives inside it. A `SKILL.md` is still complete on its
+own: it can be installed via the marketplace, or copied into any project's `.claude/skills/` directory or linked as a
+user-level skill in `~/.claude/skills/`.
 
 Rules are the other half: **skills load on demand, rules load always.** A rule file is copied (or symlinked) into
 `.claude/rules/`, where Claude Code loads it at the start of every session at the same priority as `.claude/CLAUDE.md`.
@@ -32,9 +40,9 @@ is organized the same way. Claude Code discovers `.md` files under `.claude/rule
 directory can be preserved on install.
 
 Agents are the third kind: a subagent definition — role, instructions, and a pinned `model` — that Claude Code delegates
-to by name once it sits in `.claude/agents/`. They live in a top-level `agents/{category}/` catalog rather than inside
-any one skill, because more than one skill may want to cite the same role. Claude Code reads `.claude/agents/` flat, so
-the category directory is **not** preserved on install. The catalog entries are examples for consuming repos — this repo
+to by name once it sits in `.claude/agents/` or arrives via a plugin. They live flat in their plugin's `agents/`
+directory (beside the skill, not inside it, because more than one skill may cite the same role), and both
+`.claude/agents/` and plugin agent dirs are read flat. The catalog entries are examples for consuming repos — this repo
 does not install them into its own `.claude/`.
 
 ## Conventions
@@ -54,9 +62,13 @@ does not install them into its own `.claude/`.
 
 ## Adding a new skill
 
-1. Create `skills/{skill-name}/SKILL.md` with frontmatter and full instructions.
-2. If the skill needs reference files (schemas, templates), add them to `skills/{skill-name}/references/`.
-3. Update the skill catalog below.
+1. Create `plugins/{plugin-name}/skills/{skill-name}/SKILL.md` with frontmatter and full instructions — reuse the plugin
+   whose theme fits, or add a new plugin (manifest + marketplace entry) when the unit is genuinely new. Project-specific
+   reference implementations go under top-level `skills/` instead, unpackaged.
+2. If the skill needs reference files (schemas, templates), add them to its `references/` directory.
+3. Bump the plugin's `version` in its `.claude-plugin/plugin.json` — that is what tells installed copies an update
+   exists.
+4. Update the skill catalog below.
 
 ## Adding a new rule
 
@@ -67,13 +79,14 @@ does not install them into its own `.claude/`.
 
 ## Adding a new agent
 
-1. Create `agents/{category}/{agent-name}.md` — the complete subagent definition, written to be installed verbatim.
-   Reuse an existing category directory, or add one when the role belongs to a genuinely new group.
+1. Create `plugins/{plugin-name}/agents/{agent-name}.md` — the complete subagent definition, written to be installed
+   verbatim, flat in the plugin's `agents/` directory.
 2. Always pin `model:`. An unpinned subagent inherits its caller's model, which is the cost the `model-tier-policy`
    skill exists to prevent.
-3. Add it to the agent catalog in the README, under its category heading.
-4. If a skill installs it, add it to that skill's installer — `model-tier-policy` sources its agents from
-   `agents/model-tier-policy/`, so a new role there needs a line in `skills/model-tier-policy/references/install.py`.
+3. Add it to the agent catalog in the README, and bump the plugin's `version`.
+4. If a skill installs it by hand too, add it to that skill's installer — `model-tier-policy` sources its agents from
+   `plugins/model-tier-policy/agents/`, so a new role there needs a line in
+   `plugins/model-tier-policy/skills/model-tier-policy/references/install.py`.
 
 ## This repo's own rules
 
@@ -81,18 +94,23 @@ does not install them into its own `.claude/`.
 the two in sync** — edit the canonical copy under `rules/`, then re-copy. This repo follows semi-linear history: branch,
 rebase onto `main`, merge with a merge commit, never squash or rebase-merge.
 
+The same sync discipline applies to `rules/build-discipline/worktree-builds.md`: the canonical copy lives in the
+top-level `rules/` catalog, and a second copy ships inside the model-tier-policy plugin
+(`plugins/model-tier-policy/skills/model-tier-policy/references/rules/build-discipline/worktree-builds.md`) because an
+installed plugin cannot reach outside its own directory. Edit the canonical copy, then re-copy into the plugin.
+
 ## Skill catalog
 
-| Skill                                                  | Description                                                                                  |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| [start-session](skills/start-session/SKILL.md)         | Start or resume a git session branch                                                         |
-| [end-session](skills/end-session/SKILL.md)             | Finalize a session branch — summary, finalize hook, merge                                    |
-| [ingest-artifact](skills/ingest-artifact/SKILL.md)     | Ingest raw data into a project's artifact store                                              |
-| [record-decision](skills/record-decision/SKILL.md)     | Record a numbered architecture/design decision                                               |
-| [arda-end-session](skills/arda-end-session/SKILL.md)   | Project-specific session finalization for Arda Net (reference implementation)                |
-| [session-timelog](skills/session-timelog/SKILL.md)     | Record a session's own usage as a content-free timeline on a tracking branch                 |
-| [time-report](skills/time-report/SKILL.md)             | Build a time report + timesheet from timelines, commits, and PRs/issues                      |
-| [model-tier-policy](skills/model-tier-policy/SKILL.md) | An Opus 5 orchestrator coordinates; Fable 5 plans; Opus 5 / Sonnet 5 execute — hook-enforced |
+| Skill                                                                            | Description                                                                                  |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [start-session](plugins/git-workflow/skills/start-session/SKILL.md)              | Start or resume a git session branch                                                         |
+| [end-session](plugins/git-workflow/skills/end-session/SKILL.md)                  | Finalize a session branch — summary, finalize hook, merge                                    |
+| [ingest-artifact](plugins/project-management/skills/ingest-artifact/SKILL.md)    | Ingest raw data into a project's artifact store                                              |
+| [record-decision](plugins/project-management/skills/record-decision/SKILL.md)    | Record a numbered architecture/design decision                                               |
+| [arda-end-session](skills/arda-end-session/SKILL.md)                             | Project-specific session finalization for Arda Net (reference implementation)                |
+| [session-timelog](plugins/time-tracking/skills/session-timelog/SKILL.md)         | Record a session's own usage as a content-free timeline on a tracking branch                 |
+| [time-report](plugins/time-tracking/skills/time-report/SKILL.md)                 | Build a time report + timesheet from timelines, commits, and PRs/issues                      |
+| [model-tier-policy](plugins/model-tier-policy/skills/model-tier-policy/SKILL.md) | An Opus 5 orchestrator coordinates; Fable 5 plans; Opus 5 / Sonnet 5 execute — hook-enforced |
 
 ## Installing a skill
 
@@ -100,8 +118,8 @@ Copy the skill directory into your project or user-level Claude config:
 
 ```bash
 # Project-level (available only in that repo)
-cp -r skills/start-session /path/to/repo/.claude/skills/
+cp -r plugins/git-workflow/skills/start-session /path/to/repo/.claude/skills/
 
 # User-level (available in all repos)
-cp -r skills/start-session ~/.claude/skills/
+cp -r plugins/git-workflow/skills/start-session ~/.claude/skills/
 ```
