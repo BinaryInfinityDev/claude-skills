@@ -36,6 +36,13 @@ FILES = [
 HOOK_FILES = [
     ("model_tier_guard.py", "hooks/model_tier_guard.py"),
     ("model_tier_context.py", "hooks/model_tier_context.py"),
+    # The reminder hook is a loader; these fragments are the text it injects, resolved beside the script.
+    ("context/premium.md", "hooks/context/premium.md"),
+    ("context/premium-brief.md", "hooks/context/premium-brief.md"),
+    ("context/orchestrator.md", "hooks/context/orchestrator.md"),
+    ("context/orchestrator-brief.md", "hooks/context/orchestrator-brief.md"),
+    ("context/worker.md", "hooks/context/worker.md"),
+    ("context/worker-brief.md", "hooks/context/worker-brief.md"),
 ]
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [

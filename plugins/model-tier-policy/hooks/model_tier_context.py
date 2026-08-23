@@ -9,6 +9,8 @@ Injected context is attached to the turn's user message and stays in the transcr
 accumulates — in a premium-tier session it spends exactly the budget it exists to protect. So the full text lands on
 turn 1 and every `reminder_interval` turns after (default 10), and a one-line marker carries the turns in between.
 SessionStart and PostCompact always re-anchor with the full text.
+
+The injected text itself lives in context/*.md beside this script (see render below); this file is only the loader.
 """
 
 import json
@@ -29,58 +31,30 @@ ANCHOR_EVENTS = ("SessionStart", "PostCompact", "SessionResume")
 # How close together two firings of the same event must be to count as one event handled by two installed copies.
 DEDUPE_WINDOW_SECONDS = 10
 
-PREMIUM = """[model tier policy — active tier: {model} (premium)]
-You plan; you do not implement. Think, decide, review, delegate, and talk to the user.
-- Write the plan to `.claude/plans/<slug>.plan.md`, then hand executors the path — never paste file contents into a brief.
-- Delegate every procedural step: Agent(subagent_type="{executor}", model="opus", prompt=...). Use "{runner}" (Sonnet)
-  for bulk mechanical work and "{scout}" (Opus, read-only) for investigation.
-- Implementation too entangled to plan? "{senior}" (Fable) writes code — rare and deliberate; prefer a plan and an
-  executor.
-- End every brief with a return cap: "at most 15 lines — what changed (file:line), what you verified, what contradicted
-  the plan. No file contents, no transcripts, no diffs."
-- Always pin a subagent's model. Unpinned agents inherit the premium tier.
-- Your orientation budget is {budget} reads this turn; past that, send a scout.
-Premium context is the scarce resource: spend it on decisions, never on data. Edits, shell, and workflows are denied by
-hook — the denial tells you how to re-issue as a delegation."""
+# The reminder text is data, not code: it lives in context/*.md beside this script — inside the plugin when running
+# as a plugin hook, so the wording updates with the plugin and there is no second copy left to drift; beside the
+# installed copy otherwise. This loader carries only the mechanics. Tuning the policy text is a markdown edit.
+CONTEXT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "context")
 
-PREMIUM_BRIEF = (
-    "[model tier policy — {model} (premium): plan and delegate; procedural tools are hook-denied. "
-    'Delegate with Agent(subagent_type="{executor}", model="opus", ...) and cap every return. '
-    "Full policy: .claude/rules/model-tier-policy.md]"
+FALLBACK = (
+    "[model tier policy — active for {model}. Full policy: .claude/rules/model-tier-policy.md — reminder fragments "
+    "missing beside the hook, so re-read the rules file now.]"
 )
 
-ORCHESTRATOR = """[model tier policy — orchestrator session ({model})]
-You coordinate; you do not implement. Your surface is tickets, plans, dispatch, tracking, and status — nothing else.
-- Decompose work into tickets (GitHub issues) and plan files (`.claude/plans/<slug>.plan.md`); the plan file is the
-  contract you hand out.
-- Dispatch with pinned models: "{executor}" (Opus) implements, "{senior}" (Fable) for entangled work, "{scout}" (Opus,
-  read-only) investigates, "{runner}" (Sonnet) sweeps, "build-runner" (Sonnet) proves refs one at a time,
-  "code-reviewer" reads the green diff (Fable first pass, opus follow-ups), "{architect}" (Fable) decides. Cap every
-  return.
-- Read tickets and plans, never source or logs. Your scarce resource is longevity: a coordinator that hoards context
-  dies of compaction mid-project.
-Edits, shell, and workflows are denied by hook; ticket writes are allowed. The denial tells you how to delegate."""
 
-ORCHESTRATOR_BRIEF = (
-    "[model tier policy — orchestrator session ({model}): coordinate and dispatch; procedural tools are hook-denied, "
-    "ticket writes allowed. Full policy: .claude/rules/model-tier-policy.md]"
-)
-
-WORKER = """[model tier policy — active tier: {model}]
-You are the executor tier: do the procedural work yourself rather than delegating it upward.
-Escalate to Agent(subagent_type="{architect}", model="fable") only at a real fork — an architectural choice with lasting
-consequences, a design you cannot converge on, or a repeated failure whose cause you cannot name. It returns a decision,
-not code. When a decision alone would not unblock you — the design and the code must be found together, or the change is
-hard to reverse — escalate to Agent(subagent_type="{senior}", model="fable") instead, which returns working code plus the
-judgment calls behind it. Neither is for work that is merely tedious.
-Escalation briefs are distilled: the question, options already ruled out and why, constraints, the decision needed.
-Under 40 lines, no source dumps."""
-
-WORKER_BRIEF = (
-    "[model tier policy — {model}: executor tier, do the work yourself. "
-    'Escalate to "{architect}" (fable) for a decision, "{senior}" (fable) only when a decision alone would not '
-    "unblock the work. Full policy: .claude/rules/model-tier-policy.md]"
-)
+def render(name, values):
+    """The named context fragment, placeholders filled. Degrades softly: a missing or unreadable fragment falls back
+    to a one-line pointer at the rules file, and a malformed placeholder yields the raw text — still readable policy —
+    rather than no reminder at all."""
+    try:
+        with open(os.path.join(CONTEXT_DIR, name + ".md"), encoding="utf-8") as fh:
+            text = fh.read().strip()
+    except Exception:
+        text = FALLBACK
+    try:
+        return text.format(**values)
+    except Exception:
+        return text
 
 
 def turn_number(session_id, anchor, dedupe_key):
@@ -158,29 +132,22 @@ def main():
 
     full = True if interval <= 1 else turn % interval == 1
 
+    values = {
+        "model": model,
+        "executor": cfg["executor_agent"],
+        "runner": cfg["runner_agent"],
+        "scout": cfg["scout_agent"],
+        "senior": cfg["senior_agent"],
+        "architect": cfg["architect_agent"],
+        "budget": cfg.get("read_budget", 8),
+    }
     if premium.search(model):
-        template = PREMIUM if full else PREMIUM_BRIEF
-        context = template.format(
-            model=model,
-            executor=cfg["executor_agent"],
-            runner=cfg["runner_agent"],
-            scout=cfg["scout_agent"],
-            senior=cfg["senior_agent"],
-            budget=cfg.get("read_budget", 8),
-        )
+        name = "premium"
     elif orchestrator_active(cfg):
-        template = ORCHESTRATOR if full else ORCHESTRATOR_BRIEF
-        context = template.format(
-            model=model,
-            executor=cfg["executor_agent"],
-            runner=cfg["runner_agent"],
-            scout=cfg["scout_agent"],
-            senior=cfg["senior_agent"],
-            architect=cfg["architect_agent"],
-        )
+        name = "orchestrator"
     else:
-        template = WORKER if full else WORKER_BRIEF
-        context = template.format(model=model, architect=cfg["architect_agent"], senior=cfg["senior_agent"])
+        name = "worker"
+    context = render(name if full else name + "-brief", values)
 
     print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
 
