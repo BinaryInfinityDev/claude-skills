@@ -15,6 +15,10 @@ preference.
 | **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict                    |
 | **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work — repetitive edits, formatting, boilerplate; heavy builds go to `build-runner` |
 
+Spell a role's `subagent_type` the way this install resolves it: bare (`executor`) when the repo ships its own
+`.claude/agents/`, namespaced (`model-tier-policy:executor`) when the roles come from the plugin — a plugin-served agent
+does not answer to the bare name. The hook denials and reminders print the id that resolves here; copy it verbatim.
+
 The **senior developer** is the one premium-tier role that writes code — for work that cannot be reduced to a plan an
 executor could carry out. It may change the approach but not the goal, and it delegates its own reading to `scout` and
 its own mechanical sweeps to `runner`/`executor`. If a plan can be written, write the plan and send an executor.

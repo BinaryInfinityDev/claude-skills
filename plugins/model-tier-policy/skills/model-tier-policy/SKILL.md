@@ -166,9 +166,11 @@ tracked, every session ends with an untracked-files warning from any tree-cleanl
 For a large, hard-to-reverse, or assumption-heavy change, send the plan to `devils-advocate` before executors start:
 
 ```
-Agent(subagent_type="devils-advocate", model="opus",
+Agent(subagent_type="<devils-advocate, spelled as this install resolves it>", model="opus",
       prompt=<plan file path, what you are unsure about, and 'return at most 20 lines'>)
 ```
+
+See [Addressing the agents](#addressing-the-agents) for which spelling that is.
 
 It returns a verdict — `proceed`, `fix first`, or `rethink` — with at most three ranked objections and what would settle
 each. The economics are the point: a review that costs one Opus call is cheaper than executors building the wrong thing,
@@ -249,6 +251,30 @@ obvious convention to follow, or work that is just tedious.
    extra on the premium tier and finish sooner.
 5. **Cap every return.** No exceptions.
 6. **Don't escalate a question a scout can answer.** "How does X work here?" is a read, not a decision.
+
+---
+
+## Addressing the agents
+
+The same role has two possible ids, and only one of them resolves in any given repo.
+
+| The roles come from                                            | `subagent_type` must be      |
+| -------------------------------------------------------------- | ---------------------------- |
+| the plugin (`/plugin install model-tier-policy@claude-skills`) | `model-tier-policy:executor` |
+| `.claude/agents/` or `~/.claude/agents/` (installer, by hand)  | `executor`                   |
+
+Claude Code namespaces a plugin's agents under the plugin name, so `Agent(subagent_type="executor", …)` in a
+plugin-served repo fails with `Agent type 'executor' not found`. A project- or user-scope `.claude/agents/executor.md`
+registers under the **bare** name and shadows the plugin's, so the same call is the only one that works there. Neither
+spelling is portable — which is why nothing in this policy hardcodes one.
+
+Both hooks resolve the id per install rather than printing the config value: they look for the definition file the same
+way Claude Code does (project scope, then user scope, then the plugin's own `agents/`) and spell the role bare or
+namespaced to match where it was found. So the guard's denial messages and the reminder's delegation examples always
+name an id you can copy verbatim, in either setup. The config keys (`executor_agent`, `runner_agent`, `scout_agent`,
+`architect_agent`, `senior_agent`) stay authoritative for _which_ role is named; they do not carry the namespace.
+
+When you are writing the call yourself and are unsure which applies, `/agents` lists the resolvable ids.
 
 ---
 
@@ -423,9 +449,11 @@ session already runs on while an explicit premium pin stays the same deliberate 
 spawns a general-purpose agent runs that agent _on Fable_ — the most expensive possible way to grep. The guard accepts a
 spawn only when the model cannot be inherited by accident: an explicit `model` parameter — a premium pin included,
 because an explicit pin is a deliberate escalation, the same one `senior-developer`'s definition-file pin makes — or a
-`subagent_type` whose definition file pins a model of its own. `Explore` is allowed unpinned because Claude Code caps it
-at Opus on the Claude API. `fork` is denied — forks always inherit the parent model. Builds that name the spawn tool
-`Task` are gated identically.
+`subagent_type` whose definition file pins a model of its own. A namespaced `model-tier-policy:senior-developer` counts
+the same as the bare `senior-developer` — the prefix is stripped before the definition file is looked up, so the
+namespaced spelling the guard itself hands out is never then rejected as unpinned. `Explore` is allowed unpinned because
+Claude Code caps it at Opus on the Claude API. `fork` is denied — forks always inherit the parent model. Builds that
+name the spawn tool `Task` are gated identically.
 
 **`write_allowed` globs are repo-relative, and containment is checked first.** A path is resolved (following symlinks)
 and rejected outright if it lands outside the project root, before any glob is matched. This is not belt-and-braces:
