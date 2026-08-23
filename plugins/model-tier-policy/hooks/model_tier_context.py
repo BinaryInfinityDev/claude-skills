@@ -23,7 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import load_config, live_model, orchestrator_active, project_dir
+    from model_tier_guard import agent_ref, load_config, live_model, orchestrator_active, project_dir
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -136,13 +136,18 @@ def main():
 
     full = True if interval <= 1 else turn % interval == 1
 
+    # Agent ids go through agent_ref, never straight from the config: the fragments tell the model how to spawn a
+    # sibling, and a plugin-served agent only answers to `model-tier-policy:<role>`. The two fixed roles below have no
+    # config key — the config decides *which* role is named, this decides how it is spelled.
     values = {
         "model": model,
-        "executor": cfg["executor_agent"],
-        "runner": cfg["runner_agent"],
-        "scout": cfg["scout_agent"],
-        "senior": cfg["senior_agent"],
-        "architect": cfg["architect_agent"],
+        "executor": agent_ref(root, cfg["executor_agent"]),
+        "runner": agent_ref(root, cfg["runner_agent"]),
+        "scout": agent_ref(root, cfg["scout_agent"]),
+        "senior": agent_ref(root, cfg["senior_agent"]),
+        "architect": agent_ref(root, cfg["architect_agent"]),
+        "build_runner": agent_ref(root, "build-runner"),
+        "code_reviewer": agent_ref(root, "code-reviewer"),
         "budget": cfg.get("read_budget", 8),
     }
     if premium.search(model):

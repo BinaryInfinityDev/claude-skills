@@ -51,10 +51,13 @@ the code, that is a `scout` brief, not a read.
 | Diagnosing a failed build from its log          | `build-analyst` (Haiku) — hand it the path                                            |
 | Reviewing a proven diff                         | `code-reviewer` — Fable pin for the first pass per PR, `model: "opus"` for follow-ups |
 
-Always pin the model when you spawn (`Agent(subagent_type="executor", model="opus", …)`). Every brief carries the goal,
-the plan file path, scope, acceptance criteria, and a return cap ("at most 15 lines — what changed (file:line), what you
-verified, what contradicted the plan; no file contents, no transcripts, no diffs"). Independent tasks go out in
-parallel; corrections go back out as new briefs.
+Always pin the model when you spawn — `model: "opus"` for the executor tier, never left to inherit. Address a role by
+the id **this install** resolves: the bare name (`executor`) when the repo ships its own `.claude/agents/`, the
+namespaced `model-tier-policy:executor` when the roles come from the plugin. The guard's denial messages print the
+spelling that works here, and `/agents` lists it. Every brief carries the goal, the plan file path, scope, acceptance
+criteria, and a return cap ("at most 15 lines — what changed (file:line), what you verified, what contradicted the plan;
+no file contents, no transcripts, no diffs"). Independent tasks go out in parallel; corrections go back out as new
+briefs.
 
 ## The loop per ticket
 

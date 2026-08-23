@@ -166,9 +166,11 @@ tracked, every session ends with an untracked-files warning from any tree-cleanl
 For a large, hard-to-reverse, or assumption-heavy change, send the plan to `devils-advocate` before executors start:
 
 ```
-Agent(subagent_type="devils-advocate", model="opus",
+Agent(subagent_type="<devils-advocate, spelled as this install resolves it>", model="opus",
       prompt=<plan file path, what you are unsure about, and 'return at most 20 lines'>)
 ```
+
+See [Addressing the agents](#addressing-the-agents) for which spelling that is.
 
 It returns a verdict — `proceed`, `fix first`, or `rethink` — with at most three ranked objections and what would settle
 each. The economics are the point: a review that costs one Opus call is cheaper than executors building the wrong thing,
@@ -252,6 +254,30 @@ obvious convention to follow, or work that is just tedious.
 
 ---
 
+## Addressing the agents
+
+The same role has two possible ids, and only one of them resolves in any given repo.
+
+| The roles come from                                            | `subagent_type` must be      |
+| -------------------------------------------------------------- | ---------------------------- |
+| the plugin (`/plugin install model-tier-policy@claude-skills`) | `model-tier-policy:executor` |
+| `.claude/agents/` or `~/.claude/agents/` (installer, by hand)  | `executor`                   |
+
+Claude Code namespaces a plugin's agents under the plugin name, so `Agent(subagent_type="executor", …)` in a
+plugin-served repo fails with `Agent type 'executor' not found`. A project- or user-scope `.claude/agents/executor.md`
+registers under the **bare** name and shadows the plugin's, so the same call is the only one that works there. Neither
+spelling is portable — which is why nothing in this policy hardcodes one.
+
+Both hooks resolve the id per install rather than printing the config value: they look for the definition file the same
+way Claude Code does (project scope, then user scope, then the plugin's own `agents/`) and spell the role bare or
+namespaced to match where it was found. So the guard's denial messages and the reminder's delegation examples always
+name an id you can copy verbatim, in either setup. The config keys (`executor_agent`, `runner_agent`, `scout_agent`,
+`architect_agent`, `senior_agent`) stay authoritative for _which_ role is named; they do not carry the namespace.
+
+When you are writing the call yourself and are unsure which applies, `/agents` lists the resolvable ids.
+
+---
+
 ## Installation
 
 ### As a plugin — the recommended path
@@ -289,6 +315,109 @@ When this skill is invoked in a repo that has a `.claude/model-tier-policy.versi
 installed plugin's current `.claude-plugin/plugin.json` version; if they differ, say so and offer to re-run the
 installer so the file-shaped pieces catch up. In this setup those files are the only thing that can drift — with no
 local copies left, the plugin serves the hooks and agents live.
+
+### In Claude Code Remote / cloud sessions
+
+**A fresh remote container starts with an empty marketplace cache**, even when the project's `.claude/settings.json`
+declares `extraKnownMarketplaces` and `enabledPlugins`. `claude plugin marketplace list` reports
+`No marketplaces configured`, so none of the ten agents and neither hook exists in that session.
+
+The asymmetry is what makes this dangerous rather than merely inconvenient. The rules file, the config, and the version
+stamp are **committed repo files**, so they load normally. The session therefore reads an always-loaded policy telling
+it to delegate to `executor`/`scout`/`build-runner` and asserting that `PreToolUse` hooks enforce that — with none of
+the machinery present. The policy degrades silently into advice, in exactly the environment where no one is watching the
+session drift back into doing the work itself.
+
+A plugin cannot install itself, but a repo can close the gap with a `SessionStart` hook that installs it when missing.
+That **binds the plugin in the same session** — agents spawnable and the guard firing on that session's own `Bash`
+calls, not from the next session onward. Pre-provisioning the container from an environment setup script is therefore an
+optimization, not a requirement.
+
+Five properties matter, and the snippet below is shaped by them:
+
+- **Best-effort, never blocking.** Every failure path exits 0. A session that cannot start because a plugin install
+  failed is worse than a session without the plugin.
+- **Nothing on stdout.** A `SessionStart` hook's stdout is injected into the session's context. Diagnostics go to a log
+  file and to stderr.
+- **Fast when there is nothing to do.** Gate on `claude plugin list`; the already-installed path costs about 0.7 s
+  against roughly 4 s for the install. Match the plugin's full `name@marketplace` id rather than a substring of it, so a
+  differently-named plugin that merely contains the name cannot satisfy the gate.
+- **Remote only.** Set the marker variable in the remote environment's configuration and leave it unset locally, so the
+  hook is inert on a developer machine that manages its own plugins.
+- **One source for the marketplace URL.** Read it out of `.claude/settings.json` rather than repeating it in the hook,
+  so the declaration stays the single place it is written down.
+
+`.claude/hooks/ensure-model-tier-policy.sh`:
+
+```bash
+#!/usr/bin/env bash
+# SessionStart, best-effort: install the model-tier-policy plugin when this session started without it.
+# Never blocks the session, and never writes to stdout — SessionStart stdout is injected into context.
+set -u
+
+LOG="${TMPDIR:-/tmp}/model-tier-policy-install.log"
+exec >>"$LOG" # stdout to the log; stderr is left alone, so a real failure still surfaces
+echo "=== $(date -Is) SessionStart in $PWD ==="
+
+# Remote only: set MODEL_TIER_POLICY_AUTOINSTALL=1 in the cloud environment's variables, and leave it unset locally.
+[ "${MODEL_TIER_POLICY_AUTOINSTALL:-0}" = "1" ] || { echo "marker unset — skipping"; exit 0; }
+
+# Already there: the local case, and every session after the first in a warm container.
+# `claude plugin list` prints one `  > NAME@MARKETPLACE` line per plugin. Anchor the match to that whole id —
+# a bare substring match would also be satisfied by an unrelated `model-tier-policy-extras@…`.
+if claude plugin list 2>/dev/null | grep -qE '(^|[[:space:]>])model-tier-policy@claude-skills([[:space:]]|$)'; then
+  echo "already installed"; exit 0
+fi
+
+# The marketplace is declared once, in .claude/settings.json. Read it from there.
+URL=$(python3 - <<'EOF' 2>/dev/null
+import json
+try:
+    settings = json.load(open(".claude/settings.json"))
+except Exception:
+    raise SystemExit(0)
+entry = (settings.get("extraKnownMarketplaces") or {}).get("claude-skills") or {}
+source = entry.get("source", entry) if isinstance(entry, dict) else entry
+if isinstance(source, str):
+    print(source)
+elif isinstance(source, dict):
+    for key in ("repo", "url", "path", "source"):
+        value = source.get(key)
+        if isinstance(value, str) and value not in ("github", "git", "local"):
+            print(value)
+            break
+EOF
+)
+[ -n "$URL" ] || { echo "no claude-skills marketplace declared in .claude/settings.json"; exit 0; }
+
+claude plugin marketplace add "$URL" || { echo "marketplace add failed"; exit 0; }
+claude plugin install model-tier-policy@claude-skills || { echo "install failed"; exit 0; }
+echo "installed"
+exit 0
+```
+
+Wire it in `.claude/settings.json` alongside whatever else runs at session start:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/ensure-model-tier-policy.sh" }]
+      }
+    ]
+  }
+}
+```
+
+The per-repo file pieces are unaffected — the rules and config are committed, so they are already in the clone. If the
+repo does **not** commit them, run `install.py --files-only` from the same hook after the install step.
+
+Two things to know while testing this. Agents are namespaced when they arrive by plugin, so the ids resolve as
+`model-tier-policy:executor` rather than `executor` — see [Addressing the agents](#addressing-the-agents). And
+`claude plugin marketplace remove <name>` **rewrites the project's committed `.claude/settings.json`** as a side effect,
+stripping `extraKnownMarketplaces` and `enabledPlugins` and re-encoding non-ASCII characters; check `git diff` after any
+teardown.
 
 ### By hand — without the marketplace
 
@@ -423,9 +552,11 @@ session already runs on while an explicit premium pin stays the same deliberate 
 spawns a general-purpose agent runs that agent _on Fable_ — the most expensive possible way to grep. The guard accepts a
 spawn only when the model cannot be inherited by accident: an explicit `model` parameter — a premium pin included,
 because an explicit pin is a deliberate escalation, the same one `senior-developer`'s definition-file pin makes — or a
-`subagent_type` whose definition file pins a model of its own. `Explore` is allowed unpinned because Claude Code caps it
-at Opus on the Claude API. `fork` is denied — forks always inherit the parent model. Builds that name the spawn tool
-`Task` are gated identically.
+`subagent_type` whose definition file pins a model of its own. A namespaced `model-tier-policy:senior-developer` counts
+the same as the bare `senior-developer` — the prefix is stripped before the definition file is looked up, so the
+namespaced spelling the guard itself hands out is never then rejected as unpinned. `Explore` is allowed unpinned because
+Claude Code caps it at Opus on the Claude API. `fork` is denied — forks always inherit the parent model. Builds that
+name the spawn tool `Task` are gated identically.
 
 **`write_allowed` globs are repo-relative, and containment is checked first.** A path is resolved (following symlinks)
 and rejected outright if it lands outside the project root, before any glob is matched. This is not belt-and-braces:

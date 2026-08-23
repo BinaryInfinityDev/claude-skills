@@ -53,6 +53,10 @@ DEFAULTS = {
     ],
 }
 
+# The namespace Claude Code registers this policy's agents under when they are served by the plugin rather than by
+# `.claude/agents/` copies. Only a plugin-served agent needs it; see agent_ref.
+PLUGIN_NAME = "model-tier-policy"
+
 # Built-in agent types that are safe to spawn without pinning a model.
 # Explore inherits the main conversation's model but is capped at Opus on the Claude API.
 UNPINNED_OK = {"explore"}
@@ -241,6 +245,78 @@ def bump_read_count(session_key, turn_key, call_key):
     return state["count"]
 
 
+def agent_search_bases(root):
+    """(directory, is_local) pairs in the order Claude Code resolves an agent name.
+
+    Project scope first, then user scope, then the plugin's own `agents/` directory — reachable both relative to this
+    script and via $CLAUDE_PLUGIN_ROOT. `is_local` records whether a hit there registers under the *bare* name
+    (project/user scope) or only namespaced (plugin-served); see agent_ref.
+
+    A hand-installed copy of this hook lives in `.claude/hooks/`, so its `../agents` is the project-scope directory,
+    not a plugin's. The normalized-path check below keeps that hit classified as local.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    bases = [
+        (os.path.join(root, ".claude", "agents"), True),
+        (os.path.expanduser("~/.claude/agents"), True),
+        (os.path.normpath(os.path.join(script_dir, "..", "agents")), False),
+    ]
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        bases.append((os.path.join(plugin_root, "agents"), False))
+    local_dirs = {os.path.normpath(base) for base, is_local in bases if is_local}
+    return [(base, is_local or os.path.normpath(base) in local_dirs) for base, is_local in bases]
+
+
+def find_agent_definition(root, agent_type):
+    """(path, is_local) for the first definition file matching agent_type, or (None, False) when there is none.
+
+    `agent_type` comes from tool input and is interpolated into a path, so it is restricted to a bare filename here —
+    otherwise a name like `../../some/other` would read a file outside the agents directory. A `model-tier-policy:`
+    prefix is stripped first: that is how a caller addresses *these* agents when they are plugin-served, and the
+    definition file is still named for the bare role. Another plugin's namespace is left alone — its agents are not in
+    these directories, and stripping the prefix would match a same-named role of ours that is not the one being
+    spawned.
+    """
+    if not agent_type:
+        return None, False
+    if agent_type.startswith(PLUGIN_NAME + ":"):
+        agent_type = agent_type[len(PLUGIN_NAME) + 1 :]
+    if not agent_type or os.sep in agent_type or (os.altsep and os.altsep in agent_type) or os.pardir in agent_type:
+        return None, False
+    for base, is_local in agent_search_bases(root):
+        path = os.path.join(base, "%s.md" % agent_type)
+        if os.path.exists(path):
+            return path, is_local
+    return None, False
+
+
+def agent_ref(root, agent_type):
+    """How *this* install must spell agent_type in `subagent_type`.
+
+    A denial that names an unresolvable agent is worse than no denial: the model follows the instruction verbatim and
+    gets "Agent type 'executor' not found", then goes looking for a broken environment. The two scopes spell the same
+    role differently — a project- or user-scope `.claude/agents/executor.md` registers under the bare name and shadows
+    the plugin's, while a plugin-served agent is only resolvable as `model-tier-policy:executor` — so the spelling is
+    resolved the same way the definition is, rather than hardcoded either way.
+
+    A role no definition can be found for keeps the bare name: the config names something this install does not ship,
+    and inventing a namespace for it would only add a wrong prefix to an already-wrong name.
+    """
+    path, is_local = find_agent_definition(root, agent_type)
+    if path is None or is_local:
+        return agent_type
+    return "%s:%s" % (PLUGIN_NAME, agent_type)
+
+
+def agent_refs(root, cfg):
+    """The configured role names, each spelled the way this install resolves it."""
+    return {
+        key: agent_ref(root, cfg[key])
+        for key in ("executor_agent", "runner_agent", "scout_agent", "architect_agent", "senior_agent")
+    }
+
+
 def agent_pins_model(root, agent_type):
     """True when the named agent definition pins a model of its own — premium or not.
 
@@ -251,43 +327,24 @@ def agent_pins_model(root, agent_type):
     `senior-developer` is exactly that, and rejecting it would send the caller to the executor tier for work the role
     exists to take off it.
 
-    `agent_type` comes from tool input and is interpolated into a path, so it is restricted to a bare filename here —
-    otherwise a name like `../../some/other` would read a file outside the agents directory and take its `model:` line
-    as the pin.
-
     Plugin-served agents are visible too: when the policy runs as a plugin there may be no `.claude/agents` copies at
-    all (the installer's files-only mode removes them), so the plugin's own `agents/` directory — reachable both
-    relative to this script and via $CLAUDE_PLUGIN_ROOT — is part of the search. Without it, every plugin agent would
-    read as unpinned and the guard would demand an explicit model for definitions that already pin one.
+    all (the installer's files-only mode removes them). Without that, every plugin agent would read as unpinned and the
+    guard would demand an explicit model for definitions that already pin one.
     """
-    if not agent_type or os.sep in agent_type or (os.altsep and os.altsep in agent_type) or os.pardir in agent_type:
+    path, _ = find_agent_definition(root, agent_type)
+    if path is None:
         return False
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    bases = [
-        os.path.join(root, ".claude", "agents"),
-        os.path.expanduser("~/.claude/agents"),
-        os.path.normpath(os.path.join(script_dir, "..", "agents")),
-    ]
-    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if plugin_root:
-        bases.append(os.path.join(plugin_root, "agents"))
-    for base in bases:
-        path = os.path.join(base, "%s.md" % agent_type)
-        if not os.path.exists(path):
-            continue
-        try:
-            head = open(path, encoding="utf-8").read(4096)
-        except Exception:
-            continue
-        match = re.search(r"^model:\s*['\"]?([\w.\-]+)", head, re.MULTILINE)
-        if not match:
-            return False
-        value = match.group(1).strip()
-        return value != "inherit"
-    return False
+    try:
+        head = open(path, encoding="utf-8").read(4096)
+    except Exception:
+        return False
+    match = re.search(r"^model:\s*['\"]?([\w.\-]+)", head, re.MULTILINE)
+    if not match:
+        return False
+    return match.group(1).strip() != "inherit"
 
 
-def check_agent_call(cfg, root, tool_input, premium):
+def check_agent_call(root, refs, tool_input, premium):
     """Reject subagent spawns that would run on the premium tier."""
     model = (tool_input.get("model") or "").strip()
     agent_type = (tool_input.get("subagent_type") or "").strip()
@@ -300,7 +357,7 @@ def check_agent_call(cfg, root, tool_input, premium):
     if agent_type.lower() in NEVER_UNPINNED:
         return (
             "Model tier policy: `%s` always inherits the parent model, so this would run on the premium tier.\n"
-            "Use the `%s` agent instead, or pass model: \"opus\"." % (agent_type, cfg["executor_agent"])
+            "Use the `%s` agent instead, or pass model: \"opus\"." % (agent_type, refs["executor_agent"])
         )
     if agent_type and agent_pins_model(root, agent_type):
         return None
@@ -311,11 +368,11 @@ def check_agent_call(cfg, root, tool_input, premium):
         "Agents available: %s (Opus, implementation), %s (Sonnet, bulk mechanical), %s (Opus, read-only research).\n"
         "For work that genuinely needs the premium tier to write the code, `%s` pins Fable itself."
         % (
-            cfg["executor_agent"],
-            cfg["executor_agent"],
-            cfg["runner_agent"],
-            cfg["scout_agent"],
-            cfg["senior_agent"],
+            refs["executor_agent"],
+            refs["executor_agent"],
+            refs["runner_agent"],
+            refs["scout_agent"],
+            refs["senior_agent"],
         )
     )
 
@@ -359,16 +416,20 @@ def main():
 
     tool = payload.get("tool_name") or ""
     tool_input = payload.get("tool_input") or {}
+    # Every agent id printed below is resolved, never taken from the config verbatim: a plugin-served agent only
+    # answers to `model-tier-policy:<role>`, and an instruction the model cannot follow makes the denial look like a
+    # broken environment instead of a policy.
+    refs = agent_refs(root, cfg)
     delegate_hint = (
         "Delegate it: Agent(subagent_type=\"%s\", model=\"opus\", prompt=<goal, plan file path, scope, "
-        "acceptance criteria, and a return cap of 15 lines>)." % cfg["executor_agent"]
+        "acceptance criteria, and a return cap of 15 lines>)." % refs["executor_agent"]
     )
 
     if tool in ("Agent", "Task"):  # the subagent-spawn tool is named Task in some Claude Code builds
         # Orchestrator spawns are never gated: inheritance lands on the worker tier it already runs on, and an
         # explicit premium pin is the same deliberate escalation it is for everyone else.
         if is_premium:
-            reason = check_agent_call(cfg, root, tool_input, premium)
+            reason = check_agent_call(root, refs, tool_input, premium)
             if reason:
                 deny(reason)
         allow()
@@ -403,12 +464,12 @@ def main():
                     "Model tier policy: workflow agents inherit the main-loop model, so this would run the whole "
                     "fan-out on the premium tier (%s).\nDelegate the orchestration instead: "
                     "Agent(subagent_type=\"%s\", model=\"opus\", prompt=<the workflow goal and plan file path>)."
-                    % (model, cfg["executor_agent"])
+                    % (model, refs["executor_agent"])
                 )
             deny(
                 "Model tier policy: you are running as the orchestrator — orchestration happens by dispatching "
                 "agents with pinned models, not by running workflows.\nDelegate: Agent(subagent_type=\"%s\", "
-                "model=\"opus\", prompt=<the goal and plan file path>)." % cfg["executor_agent"]
+                "model=\"opus\", prompt=<the goal and plan file path>)." % refs["executor_agent"]
             )
 
         extra = (
@@ -438,7 +499,7 @@ def main():
                 "Model tier policy: orientation budget spent (%d/%d reads this turn) and you are %s. %s\n"
                 "Send a scout instead: Agent(subagent_type=\"%s\", model=\"opus\", prompt=<the question, the paths to "
                 "search, and 'return findings only — no file contents, max 15 lines'>)."
-                % (count, budget, role, scarcity, cfg["scout_agent"])
+                % (count, budget, role, scarcity, refs["scout_agent"])
             )
 
     allow()

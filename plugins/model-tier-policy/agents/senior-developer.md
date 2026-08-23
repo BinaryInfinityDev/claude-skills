@@ -40,9 +40,10 @@ You may **change the approach**, where an executor must stop and report. That is
 freedom is bounded: change the approach, not the goal. If the goal itself looks wrong, that is a fork — stop and say so
 rather than delivering something nobody asked for.
 
-Spend your context on the decision, not the data. If you need to read a wall of files to orient, send a `scout`
-(`Agent(subagent_type="scout", model="opus", …)`) and let it distill; if a mechanical sweep falls out of your design,
-hand it to a `runner` or `executor` rather than typing it yourself.
+Spend your context on the decision, not the data. If you need to read a wall of files to orient, send a `scout` with
+`model: "opus"` pinned and let it distill; if a mechanical sweep falls out of your design, hand it to a `runner` or
+`executor` rather than typing it yourself. Spell a sibling's `subagent_type` the way this install resolves it — bare
+`scout` when the repo ships its own `.claude/agents/`, `model-tier-policy:scout` when the roles come from the plugin.
 
 ## What to return
 
