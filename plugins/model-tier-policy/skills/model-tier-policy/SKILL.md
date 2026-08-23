@@ -316,6 +316,106 @@ installed plugin's current `.claude-plugin/plugin.json` version; if they differ,
 installer so the file-shaped pieces catch up. In this setup those files are the only thing that can drift — with no
 local copies left, the plugin serves the hooks and agents live.
 
+### In Claude Code Remote / cloud sessions
+
+**A fresh remote container starts with an empty marketplace cache**, even when the project's `.claude/settings.json`
+declares `extraKnownMarketplaces` and `enabledPlugins`. `claude plugin marketplace list` reports
+`No marketplaces configured`, so none of the ten agents and neither hook exists in that session.
+
+The asymmetry is what makes this dangerous rather than merely inconvenient. The rules file, the config, and the version
+stamp are **committed repo files**, so they load normally. The session therefore reads an always-loaded policy telling
+it to delegate to `executor`/`scout`/`build-runner` and asserting that `PreToolUse` hooks enforce that — with none of
+the machinery present. The policy degrades silently into advice, in exactly the environment where no one is watching the
+session drift back into doing the work itself.
+
+A plugin cannot install itself, but a repo can close the gap with a `SessionStart` hook that installs it when missing.
+That **binds the plugin in the same session** — agents spawnable and the guard firing on that session's own `Bash`
+calls, not from the next session onward. Pre-provisioning the container from an environment setup script is therefore an
+optimization, not a requirement.
+
+Five properties matter, and the snippet below is shaped by them:
+
+- **Best-effort, never blocking.** Every failure path exits 0. A session that cannot start because a plugin install
+  failed is worse than a session without the plugin.
+- **Nothing on stdout.** A `SessionStart` hook's stdout is injected into the session's context. Diagnostics go to a log
+  file and to stderr.
+- **Fast when there is nothing to do.** Gate on `claude plugin list`; the already-installed path costs about 0.7 s
+  against roughly 4 s for the install.
+- **Remote only.** Set the marker variable in the remote environment's configuration and leave it unset locally, so the
+  hook is inert on a developer machine that manages its own plugins.
+- **One source for the marketplace URL.** Read it out of `.claude/settings.json` rather than repeating it in the hook,
+  so the declaration stays the single place it is written down.
+
+`.claude/hooks/ensure-model-tier-policy.sh`:
+
+```bash
+#!/usr/bin/env bash
+# SessionStart, best-effort: install the model-tier-policy plugin when this session started without it.
+# Never blocks the session, and never writes to stdout — SessionStart stdout is injected into context.
+set -u
+
+LOG="${TMPDIR:-/tmp}/model-tier-policy-install.log"
+exec >>"$LOG" # stdout to the log; stderr is left alone, so a real failure still surfaces
+echo "=== $(date -Is) SessionStart in $PWD ==="
+
+# Remote only: set MODEL_TIER_POLICY_AUTOINSTALL=1 in the cloud environment's variables, and leave it unset locally.
+[ "${MODEL_TIER_POLICY_AUTOINSTALL:-0}" = "1" ] || { echo "marker unset — skipping"; exit 0; }
+
+# Already there: the local case, and every session after the first in a warm container.
+if claude plugin list 2>/dev/null | grep -q 'model-tier-policy'; then
+  echo "already installed"; exit 0
+fi
+
+# The marketplace is declared once, in .claude/settings.json. Read it from there.
+URL=$(python3 - <<'EOF' 2>/dev/null
+import json
+try:
+    settings = json.load(open(".claude/settings.json"))
+except Exception:
+    raise SystemExit(0)
+entry = (settings.get("extraKnownMarketplaces") or {}).get("claude-skills") or {}
+source = entry.get("source", entry) if isinstance(entry, dict) else entry
+if isinstance(source, str):
+    print(source)
+elif isinstance(source, dict):
+    for key in ("repo", "url", "path", "source"):
+        value = source.get(key)
+        if isinstance(value, str) and value not in ("github", "git", "local"):
+            print(value)
+            break
+EOF
+)
+[ -n "$URL" ] || { echo "no claude-skills marketplace declared in .claude/settings.json"; exit 0; }
+
+claude plugin marketplace add "$URL" || { echo "marketplace add failed"; exit 0; }
+claude plugin install model-tier-policy@claude-skills || { echo "install failed"; exit 0; }
+echo "installed"
+exit 0
+```
+
+Wire it in `.claude/settings.json` alongside whatever else runs at session start:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/ensure-model-tier-policy.sh" }]
+      }
+    ]
+  }
+}
+```
+
+The per-repo file pieces are unaffected — the rules and config are committed, so they are already in the clone. If the
+repo does **not** commit them, run `install.py --files-only` from the same hook after the install step.
+
+Two things to know while testing this. Agents are namespaced when they arrive by plugin, so the ids resolve as
+`model-tier-policy:executor` rather than `executor` — see [Addressing the agents](#addressing-the-agents). And
+`claude plugin marketplace remove <name>` **rewrites the project's committed `.claude/settings.json`** as a side effect,
+stripping `extraKnownMarketplaces` and `enabledPlugins` and re-encoding non-ASCII characters; check `git diff` after any
+teardown.
+
 ### By hand — without the marketplace
 
 **Copying the skill directory somewhere does not install the policy.** A skill loads on demand and activates nothing;
