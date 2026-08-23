@@ -1,0 +1,29 @@
+{
+  "name": "claude-skills",
+  "owner": { "name": "BinaryInfinityDev" },
+  "metadata": {
+    "description": "Reusable Claude Code plugins: model-tier budget enforcement with a pinned-model agent team, git session workflow, project management, and time tracking"
+  },
+  "plugins": [
+    {
+      "name": "model-tier-policy",
+      "source": "./plugins/model-tier-policy",
+      "description": "An Opus 5 orchestrator coordinates a team of pinned-model agents; Fable 5 plans; Opus 5 / Sonnet 5 execute — hook-enforced"
+    },
+    {
+      "name": "git-workflow",
+      "source": "./plugins/git-workflow",
+      "description": "Session-branch workflow: start or resume a session branch, finalize it with summary and merge"
+    },
+    {
+      "name": "project-management",
+      "source": "./plugins/project-management",
+      "description": "Ingest raw data into a project's artifact store; record numbered architecture decisions"
+    },
+    {
+      "name": "time-tracking",
+      "source": "./plugins/time-tracking",
+      "description": "Content-free session timelines on a tracking branch, pooled into time reports and timesheets"
+    }
+  ]
+}

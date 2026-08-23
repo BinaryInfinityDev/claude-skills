@@ -1,0 +1,34 @@
+{
+  "enabled": true,
+  "premium_model_pattern": "fable",
+  "read_budget": 8,
+  "reminder_interval": 10,
+  "orchestrator_mode": false,
+  "bar_command": null,
+  "orchestrator_tools_allowed": [
+    "^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"
+  ],
+  "executor_agent": "executor",
+  "runner_agent": "runner",
+  "scout_agent": "scout",
+  "architect_agent": "architect",
+  "senior_agent": "senior-developer",
+  "write_allowed": [
+    ".claude/plans/**",
+    "docs/plans/**",
+    "**/*.plan.md",
+    ".claude/decisions/**",
+    "decisions/**",
+    ".claude/reviews/**"
+  ],
+  "bash_allowed": [],
+  "research_tools_allowed": [
+    "^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"
+  ],
+  "procedural_tools_denied": [
+    "^(Edit|MultiEdit|Write|NotebookEdit)$",
+    "^(Bash|BashOutput|KillShell)$",
+    "^Workflow$",
+    "^mcp__github__(create|update|push|merge|delete|add_|sub_issue|fork|assign|request_|resolve|unresolve|run_|actions_run|issue_write|pull_request_review_write)"
+  ]
+}
