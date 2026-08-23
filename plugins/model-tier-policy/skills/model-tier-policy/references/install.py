@@ -71,6 +71,23 @@ def plugin_version():
             return json.load(fh).get("version") or "unversioned"
     except Exception:
         return "unversioned"
+
+
+def stamp_source():
+    """Where this install came from, in terms a reader of the committed stamp can act on.
+
+    Never a filesystem path: the stamp is meant to be committed, and an absolute path under one person's home is
+    meaningless to everyone else and churns on every re-install. The marketplace name is derived from the plugin
+    cache layout (~/.claude/plugins/cache/{marketplace}/{plugin}/{version}); anything else is a checkout.
+    """
+    parts = PLUGIN_ROOT.split(os.sep)
+    try:
+        cache_index = len(parts) - 1 - parts[::-1].index("cache")
+        if parts[cache_index - 1] == "plugins" and cache_index + 1 < len(parts):
+            return "%s marketplace" % parts[cache_index + 1]
+    except ValueError:
+        pass
+    return "checkout"
 # Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
 LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
@@ -283,7 +300,7 @@ def main():
             "model-tier-policy %s\nsource: %s\ninstalled: %s\n"
             % (
                 plugin_version(),
-                PLUGIN_ROOT,
+                stamp_source(),
                 datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             )
         )

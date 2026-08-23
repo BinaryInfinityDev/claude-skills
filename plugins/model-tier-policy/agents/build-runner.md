@@ -42,11 +42,16 @@ Run the build with output captured to a log file in the system temp directory (s
 never scrollback-only. Consult the timing ledger first so you know what "normal" looks like: a job that typically takes
 17 minutes and has run 40 is hung — kill it, clean up, and report that, with no ledger row.
 
-Gradle first, and know the tool: invoke `./gradlew <tasks>` with `--console=plain`; recover a corrupted configuration
-cache with `--no-configuration-cache`; failure boundaries are `> Task … FAILED` and the `FAILURE:` summary block; "See
-the report at …" pointers lead to the per-test XML/HTML where the assertion text lives; exit code 0 is success, and a
-non-zero exit with no terminal summary line means the build was killed, not that it failed. Other build tools follow the
-same contract: the repo's own invocation, output to a file, exit code respected.
+**The repo's own bar wins over anything you would compose.** If the repo declares a verification entry point — a
+`bar_command` in `.claude/model-tier-policy.json`, or a script its docs name for exactly this — run that, verbatim, and
+treat its machine verdict line as authoritative rather than re-adjudicating from raw output. Repos build such scripts
+because failures shipped; do not reinvent a weaker invocation beside one.
+
+Otherwise, Gradle first, and know the tool: invoke `./gradlew <tasks>` with `--console=plain`; recover a corrupted
+configuration cache with `--no-configuration-cache`; failure boundaries are `> Task … FAILED` and the `FAILURE:` summary
+block; "See the report at …" pointers lead to the per-test XML/HTML where the assertion text lives; exit code 0 is
+success, and a non-zero exit with no terminal summary line means the build was killed, not that it failed. Other build
+tools follow the same contract: the repo's own invocation, output to a file, exit code respected.
 
 ## Analysis is not your job
 

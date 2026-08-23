@@ -440,22 +440,23 @@ sanction writes anywhere on the filesystem. An absolute glob will therefore neve
 `.claude/model-tier-policy.json` (the hooks are dependency-free and read JSON; `.claude/model-tier-policy.yaml` is also
 read when PyYAML happens to be installed).
 
-| Key                          | Default                                                                    | Purpose                                                                     |
-| ---------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `enabled`                    | `true`                                                                     | Master switch — `false` disables both hooks entirely                        |
-| `premium_model_pattern`      | `"fable"`                                                                  | Case-insensitive regex matched against the live model ID                    |
-| `read_budget`                | `8`                                                                        | Read-family tool calls the premium tier gets per turn; `0` disables the cap |
-| `reminder_interval`          | `10`                                                                       | Turns between full policy re-injections; `1` sends it every turn            |
-| `orchestrator_mode`          | `false`                                                                    | Treat non-premium main-loop sessions as the orchestrator (see Topologies)   |
-| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`     | Regexes for mutating tools the orchestrator may still use (tickets)         |
-| `write_allowed`              | plan, decision, and review globs (see `references/model-tier-policy.json`) | Repo-relative globs the premium tier may write (see below)                  |
-| `bash_allowed`               | `[]`                                                                       | Regexes for shell commands the premium tier may run                         |
-| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                  | Regexes for tool names denied on the premium tier                           |
-| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch\|NotebookRead)$"]`              | Regexes for the budgeted read family                                        |
-| `executor_agent`             | `"executor"`                                                               | Agent name cited in denial messages                                         |
-| `runner_agent`               | `"runner"`                                                                 | Bulk-work agent name                                                        |
-| `scout_agent`                | `"scout"`                                                                  | Read-only investigation agent name                                          |
-| `senior_agent`               | `"senior-developer"`                                                       | Premium implementation agent name                                           |
+| Key                          | Default                                                                    | Purpose                                                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `enabled`                    | `true`                                                                     | Master switch — `false` disables both hooks entirely                                                               |
+| `premium_model_pattern`      | `"fable"`                                                                  | Case-insensitive regex matched against the live model ID                                                           |
+| `read_budget`                | `8`                                                                        | Read-family tool calls the premium tier gets per turn; `0` disables the cap                                        |
+| `reminder_interval`          | `10`                                                                       | Turns between full policy re-injections; `1` sends it every turn                                                   |
+| `orchestrator_mode`          | `false`                                                                    | Treat non-premium main-loop sessions as the orchestrator (see Topologies)                                          |
+| `bar_command`                | `null`                                                                     | Repo-supplied verification command `build-runner` runs instead of composing one; its verdict line is authoritative |
+| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`     | Regexes for mutating tools the orchestrator may still use (tickets)                                                |
+| `write_allowed`              | plan, decision, and review globs (see `references/model-tier-policy.json`) | Repo-relative globs the premium tier may write (see below)                                                         |
+| `bash_allowed`               | `[]`                                                                       | Regexes for shell commands the premium tier may run                                                                |
+| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                  | Regexes for tool names denied on the premium tier                                                                  |
+| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch\|NotebookRead)$"]`              | Regexes for the budgeted read family                                                                               |
+| `executor_agent`             | `"executor"`                                                               | Agent name cited in denial messages                                                                                |
+| `runner_agent`               | `"runner"`                                                                 | Bulk-work agent name                                                                                               |
+| `scout_agent`                | `"scout"`                                                                  | Read-only investigation agent name                                                                                 |
+| `senior_agent`               | `"senior-developer"`                                                       | Premium implementation agent name                                                                                  |
 
 ### Escape hatch
 

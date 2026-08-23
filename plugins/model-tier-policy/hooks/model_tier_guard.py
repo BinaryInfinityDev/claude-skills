@@ -254,10 +254,24 @@ def agent_pins_model(root, agent_type):
     `agent_type` comes from tool input and is interpolated into a path, so it is restricted to a bare filename here —
     otherwise a name like `../../some/other` would read a file outside the agents directory and take its `model:` line
     as the pin.
+
+    Plugin-served agents are visible too: when the policy runs as a plugin there may be no `.claude/agents` copies at
+    all (the installer's files-only mode removes them), so the plugin's own `agents/` directory — reachable both
+    relative to this script and via $CLAUDE_PLUGIN_ROOT — is part of the search. Without it, every plugin agent would
+    read as unpinned and the guard would demand an explicit model for definitions that already pin one.
     """
     if not agent_type or os.sep in agent_type or (os.altsep and os.altsep in agent_type) or os.pardir in agent_type:
         return False
-    for base in (os.path.join(root, ".claude", "agents"), os.path.expanduser("~/.claude/agents")):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    bases = [
+        os.path.join(root, ".claude", "agents"),
+        os.path.expanduser("~/.claude/agents"),
+        os.path.normpath(os.path.join(script_dir, "..", "agents")),
+    ]
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        bases.append(os.path.join(plugin_root, "agents"))
+    for base in bases:
         path = os.path.join(base, "%s.md" % agent_type)
         if not os.path.exists(path):
             continue

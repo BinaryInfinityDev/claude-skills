@@ -1,6 +1,8 @@
 # Model tier policy
 
-Work is split by model tier across eight roles. This is a hard rule, enforced by `PreToolUse` hooks — not a preference.
+Work is split by model tier across eight roles, plus two supporting specialists outside the role table — `build-runner`
+and `build-analyst`, covered by frugality rules 7–8. This is a hard rule, enforced by `PreToolUse` hooks — not a
+preference.
 
 | Role                 | Agent              | Model                               | Owns                                                                                                |
 | -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |

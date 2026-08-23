@@ -4,6 +4,7 @@
   "read_budget": 8,
   "reminder_interval": 10,
   "orchestrator_mode": false,
+  "bar_command": null,
   "orchestrator_tools_allowed": [
     "^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"
   ],

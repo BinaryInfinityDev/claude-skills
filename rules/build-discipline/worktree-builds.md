@@ -8,6 +8,10 @@ in-tree; anything long enough to tie up the working tree does not.
 
 - The `build-runner` agent owns the worktree lifecycle where it is installed: create at the ref under test, run with
   output captured to a log file, remove when done. Without the agent, follow the same steps yourself.
+- **A repo's own bar wins over invented invocations.** Where the repo supplies a verification entry point — a
+  `bar_command` in `.claude/model-tier-policy.json`, or a script its docs name for exactly this — run that in the
+  worktree instead of composing a build command, and treat its machine verdict line as authoritative. The lock, the
+  timing ledger, and cleanup still apply around it.
 - Name each worktree for the branch under test plus a random identifier (`<branch>-a1b2c3`), outside the primary tree.
 - **One build job at a time per session**, coordinated through `.claude/build-runner.lock` (never committed — gitignore
   it). More concurrency means other sessions on other hosts, which requires the ref already pushed to a branch.
