@@ -40,10 +40,14 @@ recommended topology, or the architect (Fable) in a premium-led session; the res
 | **Devil's advocate** (opt) | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Adversarial review of a plan before it is built: ranked objections and a verdict                                    |
 | **Runner** (bulk)          | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | High-volume mechanical work — repetitive renames, formatting sweeps, boilerplate; heavy builds go to `build-runner` |
 
-**The orchestrator coordinates and owns nothing else.** Tickets and plan files are its work product; everything below
-them is dispatched. It never edits, builds, reads source, or reads logs — and it does not make architecture calls, it
-asks `architect` for them. Its scarce resource is longevity: a coordinator that hoards context dies of compaction
-mid-project, so it holds ticket state, plan paths, and capped returns, nothing more.
+**The orchestrator coordinates and owns nothing else.** Tickets and coordination artifacts are its work product;
+everything below them is dispatched. It never edits, builds, reads source, or reads logs — and it does not make
+architecture calls, it asks `architect` for them. Its scarce resource is longevity: a coordinator that hoards context
+dies of compaction mid-project, so it holds ticket state, plan paths, and capped returns, nothing more. Project state
+splits across three files matched to their access patterns — plan (read rarely), tracker (one line per item, edited in
+place), append-only addendum (dictated, never read) — with `git-steward` doing the committing and the architect
+consolidating the detail back into the plan on a watermark; the shipped `coordination-artifacts` and `state-discipline`
+rules carry that discipline.
 
 **Opus is the default worker.** Reach for Sonnet only when the task is genuinely mechanical and voluminous enough that
 the tier difference matters. When unsure between Opus and Sonnet, pick Opus.
@@ -71,8 +75,7 @@ the reviewer settles each prior finding, fixed or open, before hunting new ones.
 through the caller to `executor`, or `senior-developer` when a finding reveals entanglement. Trivial changes may skip it
 the way routine plans skip the devil's advocate.
 
-**Specialists sit beside the roles, not among them.** Two ship with the policy, and they split running from diagnosing
-so each stays narrow:
+**Specialists sit beside the roles, not among them.** Three ship with the policy, each kept deliberately narrow:
 
 - `build-runner` (Sonnet 5) owns heavy build and test runs. It builds the ref under test in its own git worktree so
   development continues in the primary tree, captures output to a log file, times the run against the ledger it keeps in
@@ -86,6 +89,12 @@ so each stays narrow:
   are first-class returns, because an honest "could not tell" costs one re-run while a confident wrong answer costs a
   wrong fix. Project-specific signatures that look like failures but are not — cache poisoning, plugin flakes, coverage
   thresholds — belong in the target repo's `.claude/build-signatures.md`, which the agent reads when present.
+- `git-steward` (Sonnet 5) is the coordinator's git custodian, spawned per invocation and never kept resident. It
+  commits and pushes coordination artifacts (plan, tracker, addendum, decisions, reviews, operating rules), takes
+  dictated updates ("mark m13 merged as #661" costs the coordinator ten words), reconciles tracker rows against their
+  issue/PR handles, and keeps branches and worktrees tidy. It never touches feature work: artifact paths only, and
+  anything else dirty in the tree is reported, never committed or stashed — the push gate stays intact because the
+  steward is structurally outside it.
 
 ### What "procedural" means
 
@@ -289,9 +298,9 @@ The policy ships as the `model-tier-policy` plugin of the `claude-skills` market
 /plugin install model-tier-policy@claude-skills
 ```
 
-That activates the skill, all ten agents, and both hooks immediately — enforcement and the reminder included, with the
-reminder's wording loaded from context fragments inside the plugin, so **plugin updates change what the hooks say with
-no further steps**. Third-party marketplaces do not auto-update by default: toggle auto-update per marketplace in
+That activates the skill, all eleven agents, and both hooks immediately — enforcement and the reminder included, with
+the reminder's wording loaded from context fragments inside the plugin, so **plugin updates change what the hooks say
+with no further steps**. Third-party marketplaces do not auto-update by default: toggle auto-update per marketplace in
 `/plugin` → Marketplaces, or pull updates by hand with `claude plugin marketplace update claude-skills`.
 
 Two per-repo pieces are file-shaped and cannot ride a plugin — the always-loaded rules files and the
@@ -320,7 +329,7 @@ local copies left, the plugin serves the hooks and agents live.
 
 **A fresh remote container starts with an empty marketplace cache**, even when the project's `.claude/settings.json`
 declares `extraKnownMarketplaces` and `enabledPlugins`. `claude plugin marketplace list` reports
-`No marketplaces configured`, so none of the ten agents and neither hook exists in that session.
+`No marketplaces configured`, so none of the eleven agents and neither hook exists in that session.
 
 The asymmetry is what makes this dangerous rather than merely inconvenient. The rules file, the config, and the version
 stamp are **committed repo files**, so they load normally. The session therefore reads an always-loaded policy telling
@@ -453,26 +462,29 @@ policy.
 
 The installer is idempotent and reports what it changed. It writes:
 
-| File                                                | Role                                                                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `.claude/rules/model-tier-policy.md`                | Always-loaded rules — in context every session, survives compaction                  |
-| `.claude/rules/build-discipline/worktree-builds.md` | Always-loaded — builds in worktrees beside development, pushes gated on green        |
-| `.claude/agents/executor.md`                        | Opus, full tools — the default worker                                                |
-| `.claude/agents/orchestrator.md`                    | Opus, coordination tools only — tickets, plans, dispatch; never implementation       |
-| `.claude/agents/runner.md`                          | Sonnet, full tools — bulk mechanical work                                            |
-| `.claude/agents/scout.md`                           | Opus, read-only — investigation that returns findings, not dumps                     |
-| `.claude/agents/architect.md`                       | Fable, read-only — for Opus-led sessions escalating a decision                       |
-| `.claude/agents/senior-developer.md`                | Fable, writes code — for novel or tightly coupled implementation                     |
-| `.claude/agents/build-analyst.md`                   | Haiku, read-only — failed-build log triage from a path                               |
-| `.claude/agents/build-runner.md`                    | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged       |
-| `.claude/agents/code-reviewer.md`                   | Fable first pass / Opus follow-ups, read-only — adversarial review of the green diff |
-| `.claude/agents/devils-advocate.md`                 | Opus, read-only — optional adversarial review of a plan before it is built           |
-| `.claude/hooks/model_tier_guard.py`                 | `PreToolUse` — hard-denies procedural tool calls on the premium tier                 |
-| `.claude/hooks/model_tier_context.py`               | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically |
-| `.claude/hooks/context/*.md`                        | The six reminder fragments the context hook loads (per tier, full and brief)         |
-| `.claude/model-tier-policy.json`                    | Config (see below)                                                                   |
-| `.claude/model-tier-policy.version`                 | Provenance stamp: plugin version and source of this install, for drift detection     |
-| `.claude/settings.json`                             | Hook wiring, merged into whatever is already there                                   |
+| File                                                   | Role                                                                                   |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `.claude/rules/model-tier-policy.md`                   | Always-loaded rules — in context every session, survives compaction                    |
+| `.claude/rules/build-discipline/worktree-builds.md`    | Always-loaded — builds in worktrees beside development, pushes gated on green          |
+| `.claude/rules/coordination/coordination-artifacts.md` | Always-loaded — plan/tracker/addendum discipline, the steward, consolidation           |
+| `.claude/rules/coordination/state-discipline.md`       | Always-loaded — verify repo state before asserting it; silence on no-op events         |
+| `.claude/agents/executor.md`                           | Opus, full tools — the default worker                                                  |
+| `.claude/agents/orchestrator.md`                       | Opus, coordination tools only — tickets, plans, dispatch; never implementation         |
+| `.claude/agents/runner.md`                             | Sonnet, full tools — bulk mechanical work                                              |
+| `.claude/agents/scout.md`                              | Opus, read-only — investigation that returns findings, not dumps                       |
+| `.claude/agents/architect.md`                          | Fable, read-only — for Opus-led sessions escalating a decision                         |
+| `.claude/agents/senior-developer.md`                   | Fable, writes code — for novel or tightly coupled implementation                       |
+| `.claude/agents/build-analyst.md`                      | Haiku, read-only — failed-build log triage from a path                                 |
+| `.claude/agents/build-runner.md`                       | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged         |
+| `.claude/agents/code-reviewer.md`                      | Fable first pass / Opus follow-ups, read-only — adversarial review of the green diff   |
+| `.claude/agents/devils-advocate.md`                    | Opus, read-only — optional adversarial review of a plan before it is built             |
+| `.claude/agents/git-steward.md`                        | Sonnet — commits/reconciles coordination artifacts, branch hygiene; never feature work |
+| `.claude/hooks/model_tier_guard.py`                    | `PreToolUse` — hard-denies procedural tool calls on the premium tier                   |
+| `.claude/hooks/model_tier_context.py`                  | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically   |
+| `.claude/hooks/context/*.md`                           | The six reminder fragments the context hook loads (per tier, full and brief)           |
+| `.claude/model-tier-policy.json`                       | Config (see below)                                                                     |
+| `.claude/model-tier-policy.version`                    | Provenance stamp: plugin version and source of this install, for drift detection       |
+| `.claude/settings.json`                                | Hook wiring, merged into whatever is already there                                     |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
 `references/settings-snippet.json` into `.claude/settings.json`.
@@ -532,15 +544,15 @@ than a retry loop.
 
 ### What the guard denies on the premium tier
 
-| Tool                                                       | Decision                                                                                                                  |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Edit` / `MultiEdit` / `Write` / `NotebookEdit`            | Denied, unless the path is inside the repo _and_ matches `write_allowed` (plan, decision, and review files)               |
-| `Bash` / `BashOutput` / `KillShell`                        | Denied, unless the command matches a `bash_allowed` regex (empty by default)                                              |
-| `Read`/`Grep`/`Glob`/`NotebookRead`/`WebFetch`/`WebSearch` | Allowed up to `read_budget` calls per turn, then denied with a pointer to `scout`                                         |
-| `Agent` (`Task` in some builds)                            | Denied unless the model cannot be inherited by accident: an explicit pin, or a definition-file pin — see below            |
-| `Workflow`                                                 | Denied — workflow agents inherit the main-loop model, so an unpinned workflow runs the entire fan-out on the premium tier |
-| Mutating MCP tools (e.g. GitHub writes)                    | Denied                                                                                                                    |
-| Everything else                                            | Allowed                                                                                                                   |
+| Tool                                                       | Decision                                                                                                                                      |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Edit` / `MultiEdit` / `Write` / `NotebookEdit`            | Denied, unless the path is inside the repo _and_ matches `write_allowed` (plan/tracker/addendum, decision, review, and operating-rules files) |
+| `Bash` / `BashOutput` / `KillShell`                        | Denied, unless the command matches a `bash_allowed` regex (empty by default)                                                                  |
+| `Read`/`Grep`/`Glob`/`NotebookRead`/`WebFetch`/`WebSearch` | Allowed up to `read_budget` calls per turn, then denied with a pointer to `scout`                                                             |
+| `Agent` (`Task` in some builds)                            | Denied unless the model cannot be inherited by accident: an explicit pin, or a definition-file pin — see below                                |
+| `Workflow`                                                 | Denied — workflow agents inherit the main-loop model, so an unpinned workflow runs the entire fan-out on the premium tier                     |
+| Mutating MCP tools (e.g. GitHub writes)                    | Denied                                                                                                                                        |
+| Everything else                                            | Allowed                                                                                                                                       |
 
 **Orchestrator mode reuses this table.** When the session is marked as the orchestrator (`orchestrator_mode` /
 `MODEL_TIER_ORCHESTRATOR=on`) and the main loop is not premium, the same denials apply with two differences: tools
@@ -576,23 +588,24 @@ values you set. `--force` is the full reset back to shipped defaults — it writ
 prints which local values it discarded, because a silent reset of repo-specific config (a `bar_command`, a widened
 allowlist) is how customization quietly disappears.
 
-| Key                          | Default                                                                    | Purpose                                                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `enabled`                    | `true`                                                                     | Master switch — `false` disables both hooks entirely                                                               |
-| `premium_model_pattern`      | `"fable"`                                                                  | Case-insensitive regex matched against the live model ID                                                           |
-| `read_budget`                | `8`                                                                        | Read-family tool calls the premium tier gets per turn; `0` disables the cap                                        |
-| `reminder_interval`          | `10`                                                                       | Turns between full policy re-injections; `1` sends it every turn                                                   |
-| `orchestrator_mode`          | `false`                                                                    | Treat non-premium main-loop sessions as the orchestrator (see Topologies)                                          |
-| `bar_command`                | `null`                                                                     | Repo-supplied verification command `build-runner` runs instead of composing one; its verdict line is authoritative |
-| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`     | Regexes for mutating tools the orchestrator may still use (tickets)                                                |
-| `write_allowed`              | plan, decision, and review globs (see `references/model-tier-policy.json`) | Repo-relative globs the premium tier may write (see below)                                                         |
-| `bash_allowed`               | `[]`                                                                       | Regexes for shell commands the premium tier may run                                                                |
-| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                  | Regexes for tool names denied on the premium tier                                                                  |
-| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch\|NotebookRead)$"]`              | Regexes for the budgeted read family                                                                               |
-| `executor_agent`             | `"executor"`                                                               | Agent name cited in denial messages                                                                                |
-| `runner_agent`               | `"runner"`                                                                 | Bulk-work agent name                                                                                               |
-| `scout_agent`                | `"scout"`                                                                  | Read-only investigation agent name                                                                                 |
-| `senior_agent`               | `"senior-developer"`                                                       | Premium implementation agent name                                                                                  |
+| Key                          | Default                                                                                                      | Purpose                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `enabled`                    | `true`                                                                                                       | Master switch — `false` disables both hooks entirely                                                               |
+| `premium_model_pattern`      | `"fable"`                                                                                                    | Case-insensitive regex matched against the live model ID                                                           |
+| `read_budget`                | `8`                                                                                                          | Read-family tool calls the premium tier gets per turn; `0` disables the cap                                        |
+| `reminder_interval`          | `10`                                                                                                         | Turns between full policy re-injections; `1` sends it every turn                                                   |
+| `orchestrator_mode`          | `false`                                                                                                      | Treat non-premium main-loop sessions as the orchestrator (see Topologies)                                          |
+| `bar_command`                | `null`                                                                                                       | Repo-supplied verification command `build-runner` runs instead of composing one; its verdict line is authoritative |
+| `orchestrator_tools_allowed` | `["^mcp__github__(issue_write\|add_issue_comment\|sub_issue_write)$"]`                                       | Regexes for mutating tools the orchestrator may still use (tickets)                                                |
+| `write_allowed`              | plan/tracker/addendum, decision, review, and operating-rules globs (see `references/model-tier-policy.json`) | Repo-relative globs the premium tier may write (see below)                                                         |
+| `bash_allowed`               | `[]`                                                                                                         | Regexes for shell commands the premium tier may run                                                                |
+| `procedural_tools_denied`    | (see `references/model-tier-policy.json`)                                                                    | Regexes for tool names denied on the premium tier                                                                  |
+| `research_tools_allowed`     | `["^(Read\|Grep\|Glob\|WebFetch\|WebSearch\|NotebookRead)$"]`                                                | Regexes for the budgeted read family                                                                               |
+| `executor_agent`             | `"executor"`                                                                                                 | Agent name cited in denial messages                                                                                |
+| `runner_agent`               | `"runner"`                                                                                                   | Bulk-work agent name                                                                                               |
+| `scout_agent`                | `"scout"`                                                                                                    | Read-only investigation agent name                                                                                 |
+| `senior_agent`               | `"senior-developer"`                                                                                         | Premium implementation agent name                                                                                  |
+| `steward_agent`              | `"git-steward"`                                                                                              | Git custodian cited when a coordinator's git command is denied                                                     |
 
 ### Escape hatch
 

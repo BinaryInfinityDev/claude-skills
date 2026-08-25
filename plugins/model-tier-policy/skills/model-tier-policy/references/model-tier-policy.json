@@ -13,13 +13,17 @@
   "scout_agent": "scout",
   "architect_agent": "architect",
   "senior_agent": "senior-developer",
+  "steward_agent": "git-steward",
   "write_allowed": [
     ".claude/plans/**",
     "docs/plans/**",
     "**/*.plan.md",
+    "**/*.tracker.md",
+    "**/*.addendum.md",
     ".claude/decisions/**",
     "decisions/**",
-    ".claude/reviews/**"
+    ".claude/reviews/**",
+    ".claude/agent-operating-rules.md"
   ],
   "bash_allowed": [],
   "research_tools_allowed": [

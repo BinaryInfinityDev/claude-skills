@@ -1,8 +1,8 @@
 # Model tier policy
 
-Work is split by model tier across eight roles, plus two supporting specialists outside the role table — `build-runner`
-and `build-analyst`, covered by frugality rules 7–8. This is a hard rule, enforced by `PreToolUse` hooks — not a
-preference.
+Work is split by model tier across eight roles, plus three supporting specialists outside the role table —
+`build-runner`, `build-analyst`, and `git-steward`, covered by frugality rules 7–8 and 10. This is a hard rule, enforced
+by `PreToolUse` hooks — not a preference.
 
 | Role                 | Agent              | Model                               | Owns                                                                                                |
 | -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -62,6 +62,12 @@ source or logs: a question about the code is a `scout` brief, a build is `build-
 rather than making them, and cap every return. Procedural tools are hook-denied as on the premium tier; ticket writes
 are allowed.
 
+Project state lives in the plan/tracker/addendum triple (see the coordination-artifacts rule): edit tracker rows
+directly, dictate detail to `git-steward`, and never touch the addendum. At milestone boundaries have the steward
+reconcile the tracker's rows against their handles, then send `architect` a consolidation brief — it reads the addendum
+incrementally from the plan's watermark and returns the amended plan with every supersession named. Verify repo state
+before asserting it, and give no-op events no reply (see the state-discipline rule).
+
 ## When the session model is Opus or Sonnet
 
 Do the work yourself. There are two escalations, and they answer different questions:
@@ -97,6 +103,10 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 9. A non-trivial diff gets a `code-reviewer` pass after the build is green and before the PR is marked ready — its Fable
    pin covers the first pass per PR; follow-ups pass `model: "opus"` plus the previous findings (persisted under
    `.claude/reviews/`). It returns a verdict and findings; the caller routes fixes.
+10. Coordination artifacts — plan, tracker, addendum, decisions, reviews — are committed, pushed, and reconciled by
+    `git-steward` (Sonnet 5), dispatched per invocation with a one-line instruction. A coordinator edits tracker rows
+    and dictates addendum entries; it never runs git and never reads the addendum. The steward touches only artifact
+    paths — feature work is never its to push.
 
 ## Escape hatch
 
