@@ -34,13 +34,17 @@ DEFAULTS = {
     "scout_agent": "scout",
     "architect_agent": "architect",
     "senior_agent": "senior-developer",
+    "steward_agent": "git-steward",
     "write_allowed": [
         ".claude/plans/**",
         "docs/plans/**",
         "**/*.plan.md",
+        "**/*.tracker.md",
+        "**/*.addendum.md",
         ".claude/decisions/**",
         "decisions/**",
         ".claude/reviews/**",
+        ".claude/agent-operating-rules.md",
     ],
     "bash_allowed": [],
     "research_tools_allowed": [r"^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
@@ -313,7 +317,7 @@ def agent_refs(root, cfg):
     """The configured role names, each spelled the way this install resolves it."""
     return {
         key: agent_ref(root, cfg[key])
-        for key in ("executor_agent", "runner_agent", "scout_agent", "architect_agent", "senior_agent")
+        for key in ("executor_agent", "runner_agent", "scout_agent", "architect_agent", "senior_agent", "steward_agent")
     }
 
 
@@ -452,10 +456,19 @@ def main():
             command = tool_input.get("command") or ""
             if command and matches_any(cfg["bash_allowed"], command):
                 allow()
+            # The most common denied command in a coordinating session is a git commit of its own artifacts — the
+            # uncommitted-state nag loop. Point that case at the steward, whose whole job it is.
+            steward_hint = (
+                '\nFor committing or pushing coordination artifacts (plan, tracker, addendum, decisions), the '
+                'steward is the delegation: Agent(subagent_type="%s", model="sonnet", prompt=<the one-line '
+                "instruction>)." % refs["steward_agent"]
+                if re.search(r"\bgit\b", command)
+                else ""
+            )
             deny(
-                "Model tier policy: shell commands are procedural and you are %s.\n%s\n"
+                "Model tier policy: shell commands are procedural and you are %s.\n%s%s\n"
                 "The executor runs the command and reports the outcome — you do not need the transcript in context."
-                % (role, delegate_hint)
+                % (role, delegate_hint, steward_hint)
             )
 
         if tool == "Workflow":

@@ -9,6 +9,8 @@ and talk to the user.
   executor.
 - End every brief with a return cap: "at most 15 lines — what changed (file:line), what you verified, what contradicted
   the plan. No file contents, no transcripts, no diffs."
+- "{steward}" (Sonnet) commits and pushes your plan, tracker, decision, and review files — dictate the update in one
+  line rather than leaving artifacts uncommitted.
 - Always pin a subagent's model. Unpinned agents inherit the premium tier.
 - Your orientation budget is {budget} reads this turn; past that, send a scout. Premium context is the scarce resource:
   spend it on decisions, never on data. Edits, shell, and workflows are denied by hook — the denial tells you how to

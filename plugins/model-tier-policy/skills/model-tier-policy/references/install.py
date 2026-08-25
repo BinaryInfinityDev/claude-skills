@@ -30,9 +30,11 @@ HOOKS_SRC = os.path.join(PLUGIN_ROOT, "hooks")
 # (source relative to references/, destination relative to .claude/)
 FILES = [
     ("rules/model-tier-policy.md", "rules/model-tier-policy.md"),
-    # The canonical copy lives in the repo-level rules/ catalog; this one ships with the plugin so an installed
-    # plugin is self-contained. Keep the two in sync (see CLAUDE.md).
+    # For each rule below, the canonical copy lives in the repo-level rules/ catalog; these ship with the plugin so an
+    # installed plugin is self-contained. Keep each pair in sync (see CLAUDE.md).
     ("rules/build-discipline/worktree-builds.md", "rules/build-discipline/worktree-builds.md"),
+    ("rules/coordination/coordination-artifacts.md", "rules/coordination/coordination-artifacts.md"),
+    ("rules/coordination/state-discipline.md", "rules/coordination/state-discipline.md"),
 ]
 # (source relative to HOOKS_SRC, destination relative to .claude/)
 HOOK_FILES = [
@@ -58,6 +60,7 @@ AGENT_FILES = [
     ("architect.md", "agents/architect.md"),
     ("senior-developer.md", "agents/senior-developer.md"),
     ("devils-advocate.md", "agents/devils-advocate.md"),
+    ("git-steward.md", "agents/git-steward.md"),
 ]
 CONFIG = ("model-tier-policy.json", "model-tier-policy.json")
 # Provenance stamp: which plugin version these installed files came from, so the skill can flag drift after a plugin

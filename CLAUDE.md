@@ -99,9 +99,10 @@ does not install them into its own `.claude/`.
 the two in sync** — edit the canonical copy under `rules/`, then re-copy. This repo follows semi-linear history: branch,
 rebase onto `main`, merge with a merge commit, never squash or rebase-merge.
 
-The same sync discipline applies to `rules/build-discipline/worktree-builds.md`: the canonical copy lives in the
-top-level `rules/` catalog, and a second copy ships inside the model-tier-policy plugin
-(`plugins/model-tier-policy/skills/model-tier-policy/references/rules/build-discipline/worktree-builds.md`) because an
+The same sync discipline applies to every rule the model-tier-policy plugin ships a copy of —
+`rules/build-discipline/worktree-builds.md`, `rules/coordination/coordination-artifacts.md`, and
+`rules/coordination/state-discipline.md`: the canonical copy lives in the top-level `rules/` catalog, and a second copy
+ships inside the plugin (under `plugins/model-tier-policy/skills/model-tier-policy/references/rules/`) because an
 installed plugin cannot reach outside its own directory. Edit the canonical copy, then re-copy into the plugin.
 
 ## Skill catalog

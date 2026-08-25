@@ -146,6 +146,7 @@ def main():
         "scout": agent_ref(root, cfg["scout_agent"]),
         "senior": agent_ref(root, cfg["senior_agent"]),
         "architect": agent_ref(root, cfg["architect_agent"]),
+        "steward": agent_ref(root, cfg["steward_agent"]),
         "build_runner": agent_ref(root, "build-runner"),
         "code_reviewer": agent_ref(root, "code-reviewer"),
         "budget": cfg.get("read_budget", 8),
