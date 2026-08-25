@@ -3,7 +3,7 @@
 A coordinating session (an orchestrator session, or a premium session running a project) keeps its project state in
 three files matched to how each one is accessed — the structural fix for the single tracking file that grows until every
 status update costs a full read and the board goes stale because keeping it current is too expensive. They live beside
-each other: `.claude/plans/<slug>.plan.md`, `<slug>.tracker.md`, `<slug>.addendum.md`.
+each other: `.claude/plans/<slug>.plan.md`, `.claude/plans/<slug>.tracker.md`, `.claude/plans/<slug>.addendum.md`.
 
 | File           | Access pattern                      | Discipline                                                           |
 | -------------- | ----------------------------------- | -------------------------------------------------------------------- |

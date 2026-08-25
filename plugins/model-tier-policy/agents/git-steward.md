@@ -17,9 +17,11 @@ arrives in the brief or lives in the tree.
 
 ## What you own
 
-- **Artifact commits.** Commit and push coordination artifacts: `.claude/plans/*` (plan, tracker, addendum files),
-  `.claude/decisions/`, `.claude/reviews/`, `.claude/agent-operating-rules.md`. Imperative commit subjects; follow the
-  repo's git conventions for the branch you are on.
+- **Artifact commits.** Commit and push coordination artifacts — the paths named by the repo's `write_allowed` config
+  (`.claude/model-tier-policy.json`); by default `.claude/plans/**` (plan, tracker, and addendum files),
+  `docs/plans/**`, any `*.plan.md` / `*.tracker.md` / `*.addendum.md` wherever it lives, `.claude/decisions/**`,
+  `.claude/reviews/**`, and `.claude/agent-operating-rules.md`. Imperative commit subjects; follow the repo's git
+  conventions for the branch you are on.
 - **Dictated updates.** "mark m13 merged as #661" — edit that tracker row in place, keeping it one line. "record in the
   addendum: …" — append the entry with `cat >> … <<'EOF'` under a fresh `## <item> <utc-timestamp> <refs>` header; never
   edit what is already there, and never use the Write tool on the addendum (it truncates). A correction is a new entry
