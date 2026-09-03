@@ -94,23 +94,26 @@ def content_hash():
     import hashlib
 
     digest = hashlib.sha256()
-    for base, dirs, files in sorted(os.walk(PLUGIN_ROOT)):
-        dirs.sort()
+    entries = []
+    # The walk must stay lazy for the dirs mutation to prune traversal — sorted(os.walk(...)) would materialize
+    # every directory before the loop runs, turning the prune into dead code. Determinism comes from sorting the
+    # collected paths instead.
+    for base, dirs, files in os.walk(PLUGIN_ROOT):
         if "__pycache__" in dirs:
             dirs.remove("__pycache__")
-        for name in sorted(files):
-            if name.endswith(".pyc"):
-                continue
-            path = os.path.join(base, name)
-            rel = os.path.relpath(path, PLUGIN_ROOT)
-            digest.update(rel.encode("utf-8"))
-            digest.update(b"\0")
-            try:
-                with open(path, "rb") as fh:
-                    digest.update(fh.read())
-            except OSError:
-                digest.update(b"<unreadable>")
-            digest.update(b"\0")
+        for name in files:
+            if not name.endswith(".pyc"):
+                entries.append(os.path.join(base, name))
+    for path in sorted(entries):
+        rel = os.path.relpath(path, PLUGIN_ROOT)
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        try:
+            with open(path, "rb") as fh:
+                digest.update(fh.read())
+        except OSError:
+            digest.update(b"<unreadable>")
+        digest.update(b"\0")
     return digest.hexdigest()[:12]
 
 
