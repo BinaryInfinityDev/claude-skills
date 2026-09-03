@@ -10,7 +10,7 @@ by `PreToolUse` hooks — not a preference.
 | **Architect**        | `architect`        | Fable 5 (`claude-fable-5`)          | Framing, trade-offs, architecture, decomposition, acceptance criteria, review                       |
 | **Senior developer** | `senior-developer` | Fable 5 (`claude-fable-5`)          | Implementation of tricky or novel work — where design and code must be found together               |
 | **Executor**         | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation, commands, tests, git, debugging — **the default**                               |
-| **Code reviewer**    | `code-reviewer`    | Fable 5 first pass, Opus follow-ups | Adversarial read of the green diff before the PR is marked ready — verdict + findings, read-only    |
+| **Code reviewer**    | `code-reviewer`    | Fable 5 first pass, Opus follow-ups | Adversarial read of the green diff before the PR is marked ready — verdict + findings file          |
 | **Scout**            | `scout`            | Opus 5 (`claude-opus-5`), read-only | Investigation: how it works, where it lives, why it breaks, the blast radius                        |
 | **Devil's advocate** | `devils-advocate`  | Opus 5 (`claude-opus-5`), read-only | Optional: adversarial review of a plan before it is built — objections + verdict                    |
 | **Runner**           | `runner`           | Sonnet 5 (`claude-sonnet-5`)        | Bulk mechanical work — repetitive edits, formatting, boilerplate; heavy builds go to `build-runner` |
@@ -32,9 +32,9 @@ The premium tier's scarce resource is its **context**, not its time.
 Do only this: think, plan, decide, review, delegate, talk to the user.
 
 1. Frame the problem and decide the approach.
-2. Write the plan to `.claude/plans/<slug>.plan.md` — the plan file is the contract, and it survives compaction. For a
-   large, hard-to-reverse, or assumption-heavy change, send it to `devils-advocate` (Opus) before executors start; skip
-   that for routine work.
+2. Write the plan to `<paths.plans>/<slug>.plan.md` (default `.claude/plans/`) — the plan file is the contract, and it
+   survives compaction. For a large, hard-to-reverse, or assumption-heavy change, send it to `devils-advocate` (Opus)
+   before executors start; skip that for routine work.
 3. Delegate every procedural step to the `executor` agent (Opus), `runner` (Sonnet) for bulk mechanical work, or `scout`
    (Opus, read-only) for investigation. Each brief carries: goal, plan file path, scope, acceptance criteria, return
    contract.
@@ -65,8 +65,9 @@ are allowed.
 Project state lives in the plan/tracker/addendum triple (see the coordination-artifacts rule): edit tracker rows
 directly, dictate detail to `git-steward`, and never touch the addendum. At milestone boundaries have the steward
 reconcile the tracker's rows against their handles, then send `architect` a consolidation brief — it reads the addendum
-incrementally from the plan's watermark and returns the amended plan with every supersession named. Verify repo state
-before asserting it, and give no-op events no reply (see the state-discipline rule).
+incrementally from the plan's watermark, amends the plan file itself with every supersession named, and returns a
+one-line summary plus the new watermark. Verify repo state before asserting it, and give no-op events no reply (see the
+state-discipline rule).
 
 ## When the session model is Opus or Sonnet
 
@@ -101,12 +102,16 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 8. A failed build is diagnosed from its log: hand `build-analyst` (Haiku 4.5) the log path — do not re-run to re-see
    output, and never paste a log into premium context.
 9. A non-trivial diff gets a `code-reviewer` pass after the build is green and before the PR is marked ready — its Fable
-   pin covers the first pass per PR; follow-ups pass `model: "opus"` plus the previous findings (persisted under
-   `.claude/reviews/`). It returns a verdict and findings; the caller routes fixes.
+   pin covers the first pass per PR; follow-ups pass `model: "opus"` plus the previous findings. The reviewer persists
+   its findings under the reviews path (`paths.reviews`, default `.claude/reviews/`) itself and returns the verdict plus
+   the file path; the caller routes fixes.
 10. Coordination artifacts — plan, tracker, addendum, decisions, reviews — are committed, pushed, and reconciled by
     `git-steward` (Sonnet 5), dispatched per invocation with a one-line instruction. A coordinator edits tracker rows
     and dictates addendum entries; it never runs git and never reads the addendum. The steward touches only artifact
     paths — feature work is never its to push.
+11. Cap the brief like the return. Operational constants live in the operating-rules file and briefs point at it —
+    restating them is the failure the file exists to prevent. Literal content beyond a few lines (a PR body, a config
+    block) goes to a file, and the brief passes the path; a brief that outweighs its return has the economics backward.
 
 ## Escape hatch
 

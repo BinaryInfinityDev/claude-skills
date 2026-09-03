@@ -35,7 +35,12 @@ FILES = [
     ("rules/build-discipline/worktree-builds.md", "rules/build-discipline/worktree-builds.md"),
     ("rules/coordination/coordination-artifacts.md", "rules/coordination/coordination-artifacts.md"),
     ("rules/coordination/state-discipline.md", "rules/coordination/state-discipline.md"),
+    ("rules/coordination/multi-agent-hygiene.md", "rules/coordination/multi-agent-hygiene.md"),
 ]
+# Seed for the operating-rules file — created only when the configured path has nothing, never updated: the file is the
+# repo's own once it exists. Shipping a skeleton matters because an absent designated home is what invites briefs to
+# restate their constants inline.
+OPERATING_RULES_TEMPLATE = "agent-operating-rules.md"
 # (source relative to HOOKS_SRC, destination relative to .claude/)
 HOOK_FILES = [
     ("model_tier_guard.py", "hooks/model_tier_guard.py"),
@@ -75,6 +80,38 @@ def plugin_version():
             return json.load(fh).get("version") or "unversioned"
     except Exception:
         return "unversioned"
+
+
+def content_hash():
+    """A short hash over the plugin's tracked content, so drift is detectable when the version number is not moving.
+
+    A branch-pinned install makes every push a de facto release, but the version in the manifest only changes when
+    someone bumps it — so two different contents can share a version, and a version compare reports "current" over a
+    stale cache. Hashing relative path + bytes for every file under the plugin root gives the comparison the version
+    number cannot: run with --print-hash in a plugin cache directory and in the source checkout, and different hashes
+    mean different content, whatever the versions claim.
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    for base, dirs, files in sorted(os.walk(PLUGIN_ROOT)):
+        dirs.sort()
+        if "__pycache__" in dirs:
+            dirs.remove("__pycache__")
+        for name in sorted(files):
+            if name.endswith(".pyc"):
+                continue
+            path = os.path.join(base, name)
+            rel = os.path.relpath(path, PLUGIN_ROOT)
+            digest.update(rel.encode("utf-8"))
+            digest.update(b"\0")
+            try:
+                with open(path, "rb") as fh:
+                    digest.update(fh.read())
+            except OSError:
+                digest.update(b"<unreadable>")
+            digest.update(b"\0")
+    return digest.hexdigest()[:12]
 
 
 def stamp_source():
@@ -174,6 +211,12 @@ def main():
     )
     parser.add_argument("--dry-run", action="store_true", help="report what would change without writing")
     parser.add_argument(
+        "--print-hash",
+        action="store_true",
+        help="print this plugin directory's version and content hash, then exit — run it in an installed cache and "
+        "in a checkout to tell whether a branch-pinned install drifted at an unchanged version",
+    )
+    parser.add_argument(
         "--files-only",
         action="store_true",
         help="install only the pieces the plugin cannot serve (rules, config, stamp) and remove any hook/agent "
@@ -181,6 +224,10 @@ def main():
     )
     parser.add_argument("--full", action="store_true", help="copy hooks and agents even when running from a plugin")
     args = parser.parse_args()
+
+    if args.print_hash:
+        print("model-tier-policy %s content %s" % (plugin_version(), content_hash()))
+        return
 
     # Local copies do not defer to the plugin: a project-scope agent file shadows the plugin's on a name collision,
     # and a doubled reminder hook injects whichever copy fires first. So when this installer runs from inside an
@@ -247,6 +294,7 @@ def main():
     shipped_cfg = load_json(config_src)
     rename_pending = any(v == "rename" and n == config_dest for v, _o, n in migrations)
     existing_cfg_path = config_dest if os.path.exists(config_dest) else (legacy_config if rename_pending else None)
+    stale_members = {}
     if existing_cfg_path is None:
         config_action = "create"
         config_note = ""
@@ -263,6 +311,14 @@ def main():
         new_keys = [k for k in shipped_cfg if k not in user_cfg]
         config_action = "merge" if new_keys else "keep"
         config_note = " (new key%s: %s)" % ("" if len(new_keys) == 1 else "s", ", ".join(new_keys)) if new_keys else ""
+        # List values are the user's whole and entire once set: silently re-adding a member they removed would be the
+        # --force lesson again. But a shipped member they simply never received (added after their install) looks
+        # identical, so the skipped members are reported — the user decides which case each one is.
+        for key in shipped_cfg:
+            if isinstance(shipped_cfg[key], list) and isinstance(user_cfg.get(key), list):
+                missing = [m for m in shipped_cfg[key] if m not in user_cfg[key]]
+                if missing:
+                    stale_members[key] = missing
 
     settings_path = os.path.join(claude, "settings.json")
     settings = load_json(settings_path)
@@ -291,9 +347,27 @@ def main():
             print("  %-6s %s -> %s" % (verb, old, os.path.basename(new)))
         else:
             print("  %-6s %s (%s)" % (verb, old, new))
+    # The operating-rules seed goes wherever the repo's config points paths.operating_rules; a config the installer is
+    # about to create or reset means the shipped default applies.
+    paths_cfg = dict(shipped_cfg.get("paths") or {})
+    if existing_cfg_path is not None and not args.force:
+        user_paths = load_json(existing_cfg_path).get("paths")
+        if isinstance(user_paths, dict):
+            paths_cfg.update({k: v for k, v in user_paths.items() if isinstance(v, str) and v})
+    op_rules_src = os.path.join(HERE, OPERATING_RULES_TEMPLATE)
+    op_rules_dest = os.path.join(root, paths_cfg.get("operating_rules") or ".claude/agent-operating-rules.md")
+    op_rules_create = os.path.exists(op_rules_src) and not os.path.exists(op_rules_dest)
+
     for item in plan:
         print("  %-6s %s" % (item[0], item[1]))
     print("  %-6s %s%s" % (config_action, config_dest, config_note))
+    for key, members in sorted(stale_members.items()):
+        print(
+            "  note   %s: shipped member%s not in your list (left alone — add if wanted): %s"
+            % (key, "" if len(members) == 1 else "s", ", ".join(str(m) for m in members))
+        )
+    print("  %-6s %s (operating-rules seed%s)" % ("create" if op_rules_create else "keep", op_rules_dest,
+                                                  "" if op_rules_create else " — yours once it exists"))
     stamp_path = os.path.join(claude, STAMP)
     print("  %-6s %s (%s)" % ("update" if os.path.exists(stamp_path) else "create", stamp_path, plugin_version()))
     print("  %-6s %s (%s)" % ("merge", settings_path, settings_note))
@@ -338,12 +412,17 @@ def main():
         shutil.copyfile(config_dest, config_dest + ".bak")
         shutil.copyfile(config_src, config_dest)
 
+    if op_rules_create:
+        os.makedirs(os.path.dirname(op_rules_dest) or ".", exist_ok=True)
+        shutil.copyfile(op_rules_src, op_rules_dest)
+
     os.makedirs(claude, exist_ok=True)
     with open(stamp_path, "w", encoding="utf-8") as fh:
         fh.write(
-            "model-tier-policy %s\nsource: %s\ninstalled: %s\n"
+            "model-tier-policy %s\ncontent: %s\nsource: %s\ninstalled: %s\n"
             % (
                 plugin_version(),
+                content_hash(),
                 stamp_source(),
                 datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             )

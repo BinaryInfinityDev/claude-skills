@@ -23,7 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import agent_ref, load_config, live_model, orchestrator_active, project_dir
+    from model_tier_guard import agent_ref, load_config, live_model, orchestrator_active, project_dir, resolved_paths
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -150,6 +150,8 @@ def main():
         "build_runner": agent_ref(root, "build-runner"),
         "code_reviewer": agent_ref(root, "code-reviewer"),
         "budget": cfg.get("read_budget", 8),
+        # The reminder text names file locations; they follow the repo's configured paths, not the shipped defaults.
+        "plans": resolved_paths(cfg)["plans"].rstrip("/"),
     }
     if premium.search(model):
         name = "premium"

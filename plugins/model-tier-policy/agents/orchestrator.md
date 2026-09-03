@@ -19,14 +19,16 @@ else.
 
 - **Tickets** — GitHub issues where the environment provides the tools: the durable record of what is to be done, in
   progress, and finished. Create them, update them, close them when their work lands.
-- **Plan files** — `.claude/plans/<slug>.plan.md` (or wherever the repo's `write_allowed` config points): the per-task
-  contract handed to whoever implements. Tickets say _what and why_; plan files say _how and done-when_.
+- **Plan files** — `<slug>.plan.md` in the repo's plans directory (`paths.plans` in `.claude/model-tier-policy.json`,
+  default `.claude/plans/`): the per-task contract handed to whoever implements. Tickets say _what and why_; plan files
+  say _how and done-when_.
 - **The tracker and the addendum** — `<slug>.tracker.md` and `<slug>.addendum.md` beside the plan (see the
   coordination-artifacts rule). The tracker is your board: one line per item, references not narrative — edit its rows
   directly. The addendum is where detail goes to be appended, not read: you never touch it in either direction — dictate
   entries to `git-steward` (~10 words) and have workers append their own contradicted-the-brief findings.
-- **Operating rules** — `.claude/agent-operating-rules.md`: the operational constants every brief shares (build
-  protocol, commit cadence, timeouts, standing constraints), written once. Briefs point at it instead of restating it.
+- **Operating rules** — the operating-rules file (`paths.operating_rules`, default `.claude/agent-operating-rules.md`):
+  the operational constants every brief shares (build protocol, commit cadence, timeouts, standing constraints), written
+  once. Briefs point at it instead of restating it — restating is the failure the file exists to prevent.
 - **Decomposition, dispatch, tracking, status.** Break work down, route each piece to the role that owns it, know what
   is in flight, and report plainly.
 
@@ -52,7 +54,7 @@ reply.
 
 | Work                                            | Send                                                                                  |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| A decision — architecture, trade-off, interface | `architect` (Fable, read-only) — returns the call, not code                           |
+| A decision — architecture, trade-off, interface | `architect` (Fable) — returns the call, not code; writes only coordination artifacts  |
 | Stress-testing a plan before it is built        | `devils-advocate` (Opus, read-only) — optional, for risky plans                       |
 | Implementation with a plan                      | `executor` (Opus) — the default worker                                                |
 | Implementation too entangled to plan            | `senior-developer` (Fable) — rare and deliberate                                      |
@@ -69,8 +71,10 @@ the id **this install** resolves: the bare name (`executor`) when the repo ships
 namespaced `model-tier-policy:executor` when the roles come from the plugin. The guard's denial messages print the
 spelling that works here, and `/agents` lists it. Every brief carries the goal, the plan file path, scope, acceptance
 criteria, and a return cap ("at most 15 lines — what changed (file:line), what you verified, what contradicted the plan;
-no file contents, no transcripts, no diffs"). Independent tasks go out in parallel; corrections go back out as new
-briefs.
+no file contents, no transcripts, no diffs"). The brief is capped the same way the return is: constants live in the
+operating-rules file and are pointed at, and literal content beyond a few lines (a PR body, a config block) goes to a
+file whose path the brief passes — a brief that outweighs its return has the economics backward, and the brief is the
+half that stays in your context forever. Independent tasks go out in parallel; corrections go back out as new briefs.
 
 ## The loop per ticket
 
@@ -83,8 +87,8 @@ it.
 A status change costs one tracker-row edit plus a one-line `git-steward` dispatch ("mark m13 merged as #661 and commit")
 — never a git session, never a full-file read. At a milestone boundary, sprint end, or visible divergence between plan
 and reality, have the steward reconcile the tracker's rows against their handles, then send `architect` the tracker and
-the plan's addendum watermark to consolidate: it returns the amended plan (naming what each amendment supersedes) and
-the new watermark, and you write it to the plan path.
+the plan's addendum watermark to consolidate: it amends the plan file in place (naming what each amendment supersedes)
+and returns a one-line summary plus the new watermark — the plan's text never passes through your context.
 
 ## If you cannot spawn agents
 

@@ -100,23 +100,25 @@ the two in sync** — edit the canonical copy under `rules/`, then re-copy. This
 rebase onto `main`, merge with a merge commit, never squash or rebase-merge.
 
 The same sync discipline applies to every rule the model-tier-policy plugin ships a copy of —
-`rules/build-discipline/worktree-builds.md`, `rules/coordination/coordination-artifacts.md`, and
-`rules/coordination/state-discipline.md`: the canonical copy lives in the top-level `rules/` catalog, and a second copy
-ships inside the plugin (under `plugins/model-tier-policy/skills/model-tier-policy/references/rules/`) because an
-installed plugin cannot reach outside its own directory. Edit the canonical copy, then re-copy into the plugin.
+`rules/build-discipline/worktree-builds.md`, `rules/coordination/coordination-artifacts.md`,
+`rules/coordination/state-discipline.md`, and `rules/coordination/multi-agent-hygiene.md`: the canonical copy lives in
+the top-level `rules/` catalog, and a second copy ships inside the plugin (under
+`plugins/model-tier-policy/skills/model-tier-policy/references/rules/`) because an installed plugin cannot reach outside
+its own directory. Edit the canonical copy, then re-copy into the plugin.
 
 ## Skill catalog
 
-| Skill                                                                            | Description                                                                                  |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [start-session](plugins/git-workflow/skills/start-session/SKILL.md)              | Start or resume a git session branch                                                         |
-| [end-session](plugins/git-workflow/skills/end-session/SKILL.md)                  | Finalize a session branch — summary, finalize hook, merge                                    |
-| [ingest-artifact](plugins/project-management/skills/ingest-artifact/SKILL.md)    | Ingest raw data into a project's artifact store                                              |
-| [record-decision](plugins/project-management/skills/record-decision/SKILL.md)    | Record a numbered architecture/design decision                                               |
-| [arda-end-session](skills/arda-end-session/SKILL.md)                             | Project-specific session finalization for Arda Net (reference implementation)                |
-| [session-timelog](plugins/time-tracking/skills/session-timelog/SKILL.md)         | Record a session's own usage as a content-free timeline on a tracking branch                 |
-| [time-report](plugins/time-tracking/skills/time-report/SKILL.md)                 | Build a time report + timesheet from timelines, commits, and PRs/issues                      |
-| [model-tier-policy](plugins/model-tier-policy/skills/model-tier-policy/SKILL.md) | An Opus 5 orchestrator coordinates; Fable 5 plans; Opus 5 / Sonnet 5 execute — hook-enforced |
+| Skill                                                                                                                    | Description                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [start-session](plugins/git-workflow/skills/start-session/SKILL.md)                                                      | Start or resume a git session branch                                                         |
+| [end-session](plugins/git-workflow/skills/end-session/SKILL.md)                                                          | Finalize a session branch — summary, finalize hook, merge                                    |
+| [ingest-artifact](plugins/project-management/skills/ingest-artifact/SKILL.md)                                            | Ingest raw data into a project's artifact store                                              |
+| [record-decision](plugins/project-management/skills/record-decision/SKILL.md)                                            | Record a numbered architecture/design decision                                               |
+| [arda-end-session](skills/arda-end-session/SKILL.md)                                                                     | Project-specific session finalization for Arda Net (reference implementation)                |
+| [session-timelog](plugins/time-tracking/skills/session-timelog/SKILL.md)                                                 | Record a session's own usage as a content-free timeline on a tracking branch                 |
+| [time-report](plugins/time-tracking/skills/time-report/SKILL.md)                                                         | Build a time report + timesheet from timelines, commits, and PRs/issues                      |
+| [model-tier-policy](plugins/model-tier-policy/skills/model-tier-policy/SKILL.md)                                         | An Opus 5 orchestrator coordinates; Fable 5 plans; Opus 5 / Sonnet 5 execute — hook-enforced |
+| [write-in-simplified-technical-english](plugins/technical-writing/skills/write-in-simplified-technical-english/SKILL.md) | ASD-STE100 Simplified Technical English responses — unambiguous language, engineering intact |
 
 ## Installing a skill
 

@@ -3,7 +3,8 @@
 A coordinating session (an orchestrator session, or a premium session running a project) keeps its project state in
 three files matched to how each one is accessed — the structural fix for the single tracking file that grows until every
 status update costs a full read and the board goes stale because keeping it current is too expensive. They live beside
-each other: `.claude/plans/<slug>.plan.md`, `.claude/plans/<slug>.tracker.md`, `.claude/plans/<slug>.addendum.md`.
+each other in the repo's plans directory (`paths.plans` in `.claude/model-tier-policy.json`, default `.claude/plans/`):
+`<slug>.plan.md`, `<slug>.tracker.md`, `<slug>.addendum.md`.
 
 | File           | Access pattern                      | Discipline                                                           |
 | -------------- | ----------------------------------- | -------------------------------------------------------------------- |
@@ -59,5 +60,14 @@ are reconciled on a schedule instead of by accident.
 ## Operating rules
 
 Operational constants shared by every brief — build protocol, commit cadence, timeouts, standing constraints — live once
-in `.claude/agent-operating-rules.md`, and briefs point at it instead of restating it. A brief carries the task: goal,
-plan path, scope, acceptance criteria, return cap — plus the pointer.
+in the operating-rules file (`paths.operating_rules`, default `.claude/agent-operating-rules.md`), and briefs point at
+it instead of restating it. Restating is the failure this file exists to prevent: a brief carries the task — goal, plan
+path, scope, acceptance criteria, return cap — plus the pointer, and literal content beyond a few lines goes to a file
+whose path the brief passes.
+
+## The compaction threshold
+
+Compaction mid-project is the death this discipline defends against, so the approach of the threshold is an event, not
+background. When context is close to compacting: stop dispatching new work, dictate a handoff entry to the addendum —
+one line per in-flight item, with its state and its handles — have the steward true the tracker and commit everything,
+and only then hand off or compact. The artifacts are the contract that survives; anything held only in context does not.

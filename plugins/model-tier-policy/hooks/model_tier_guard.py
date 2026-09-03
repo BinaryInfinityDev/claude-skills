@@ -29,6 +29,18 @@ DEFAULTS = {
     "orchestrator_mode": False,
     # Tools the orchestrator may use even though they mutate external state: tickets are its work product.
     "orchestrator_tools_allowed": [r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"],
+    # Where the policy's file conventions live in THIS repo. Every rule, role, and reminder that names one of these
+    # paths defers to this block, so a repo that keeps plans in docs/plans/ declares it once here instead of bending
+    # its layout to the plugin's defaults. Individual keys only, no root: real repos split these locations (plans in
+    # docs/, the lock in .claude/), so they must not have to move together.
+    "paths": {
+        "plans": ".claude/plans",
+        "decisions": ".claude/decisions",
+        "reviews": ".claude/reviews",
+        "timings": ".claude/build-timings.md",
+        "runner_lock": ".claude/build-runner.lock",
+        "operating_rules": ".claude/agent-operating-rules.md",
+    },
     "executor_agent": "executor",
     "runner_agent": "runner",
     "scout_agent": "scout",
@@ -171,6 +183,37 @@ def live_model(transcript_path):
     except Exception:
         return None
     return None
+
+
+def resolved_paths(cfg):
+    """The paths block with defaults filled in for any key the user's config left out.
+
+    `load_config` overlays user config with a plain dict.update, so a user block naming only `plans` would otherwise
+    silently drop the defaults for every sibling key — the ad-hoc path handling this block exists to replace.
+    """
+    paths = dict(DEFAULTS["paths"])
+    user = cfg.get("paths")
+    if isinstance(user, dict):
+        for key, value in user.items():
+            if isinstance(value, str) and value:
+                paths[key] = value
+    return paths
+
+
+def paths_write_globs(paths):
+    """Write-allowlist globs implied by the configured paths, so declaring a location is enough by itself.
+
+    Without this, moving plans to docs/plans/ would need the same fact stated twice — once in `paths` for the prose
+    conventions and again in `write_allowed` for enforcement — and the two would drift.
+    """
+    globs = []
+    for key in ("plans", "decisions", "reviews"):
+        base = (paths.get(key) or "").rstrip("/")
+        if base:
+            globs.append(base + "/**")
+    if paths.get("operating_rules"):
+        globs.append(paths["operating_rules"])
+    return globs
 
 
 def orchestrator_active(cfg):
@@ -444,12 +487,18 @@ def main():
     if matches_any(cfg["procedural_tools_denied"], tool):
         if tool in WRITE_TOOLS:
             target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
-            if path_allowed(root, target, cfg["write_allowed"]):
+            # The configured paths imply their own write permission — write_allowed extends the set, it is not the
+            # only source. A repo that declares "plans": "docs/plans" gets docs/plans/** writable with no second entry.
+            effective = list(cfg["write_allowed"])
+            for glob in paths_write_globs(resolved_paths(cfg)):
+                if glob not in effective:
+                    effective.append(glob)
+            if path_allowed(root, target, effective):
                 allow()
             deny(
                 "Model tier policy: %s is procedural and you are %s.\n%s\nYou may write plan, decision, and review "
                 "files directly (%s) — put the plan on disk and hand the executor its path."
-                % (tool, role, delegate_hint, ", ".join(cfg["write_allowed"]))
+                % (tool, role, delegate_hint, ", ".join(effective))
             )
 
         if tool in ("Bash", "BashOutput", "KillShell"):

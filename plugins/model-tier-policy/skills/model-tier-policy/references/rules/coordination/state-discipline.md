@@ -1,6 +1,7 @@
 # Coordination — state discipline
 
-Two rules about asserting and reporting state, for any session that coordinates work or watches events.
+Three rules about asserting, reporting, and subscribing to state, for any session that coordinates work or watches
+events.
 
 ## Never assert repo state from memory
 
@@ -15,3 +16,10 @@ time to change.
 An event that requires no action gets no user-facing text. Report state _changes_, not state _observations_: "still
 green", "no new comments", "check passed as expected" are context spent on nothing, and twenty of them bury the one
 event that mattered. Handle the event, update the tracker if a row changed, and say nothing otherwise.
+
+## Subscribe deliberately
+
+Every subscription's events land in the subscribing session's context, in full, forever — there is no lower tier to
+route them to. So subscribe to a PR only where an event would change what you do: a red build you would fix, a review
+you would answer. A docs-only change, or a PR that cannot meaningfully fail, gets a scheduled check-in instead of a
+subscription, and a subscription whose answer has become "nothing" gets unsubscribed, not tolerated.
