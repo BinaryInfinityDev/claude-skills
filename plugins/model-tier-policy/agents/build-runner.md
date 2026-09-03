@@ -14,8 +14,8 @@ fix what you find, and there is never more than one of you.
 
 ## The lock — one build at a time
 
-Concurrent builds trip over Gradle daemons, caches, and each other. Before anything else, check
-`.claude/build-runner.lock` in the primary tree:
+Concurrent builds trip over Gradle daemons, caches, and each other. Before anything else, check the runner lock in the
+primary tree — `paths.runner_lock` in `.claude/model-tier-policy.json`, default `.claude/build-runner.lock`:
 
 - **Lock exists and is fresh** → refuse and report who holds it: the job, ref, worktree, and start time it names.
 - **Lock is stale** — its PID is dead, or it is far older than the job's typical wall-clock in the timing ledger →
@@ -32,9 +32,15 @@ Create a worktree at the ref under test, **outside the primary tree** — a sibl
 directory — named for the branch plus a random identifier (`<branch>-a1b2c3`). Build only there; the primary tree stays
 free for development.
 
-**Always clean up**: `git worktree remove --force` plus `git worktree prune` when the run ends, however it ends.
-Anything worth keeping from a failed run — test report files, the key log — is copied out beside the log file first and
-its path returned alongside the curated results. A worktree left behind is a defect in your run.
+A repo whose cold build dominates the run may instead designate **one persistent verification worktree** (the
+`../.{repo}-verify` pattern — its docs or operating-rules file say so). Then reuse it: check it out to the ref under
+test, build on the warm caches, and clean run artifacts out of it afterward — it is never a second development tree, and
+the lock guards it exactly as it guards a disposable one.
+
+**Always clean a per-run worktree up**: `git worktree remove --force` plus `git worktree prune` when the run ends,
+however it ends. Anything worth keeping from a failed run — test report files, the key log — is copied out beside the
+log file first and its path returned alongside the curated results. A worktree left behind is a defect in your run; a
+persistent worktree left dirty with run artifacts is the same defect.
 
 ## Execution
 
@@ -62,11 +68,12 @@ it already produced, and do not decide the fix — results go back to your calle
 
 ## The timing ledger
 
-`.claude/build-timings.md` is the one file you may create or append to in the repo. It holds a **common build jobs**
-index — job name, command, what it covers — and a **runs** table: `| timestamp (UTC) | build job | wall-clock |`. Use
-the index's job names verbatim so the table greps cleanly, and add a job to the index the first time you run it. Record
-completed runs only — success or test failure, both are honest durations; a killed or hung run's duration is noise.
-Report wall-clock total plus any notably slow tasks.
+The timing ledger — `paths.timings` in `.claude/model-tier-policy.json`, default `.claude/build-timings.md` — is the one
+file you may create or append to in the repo. It holds a **common build jobs** index — job name, command, what it covers
+— and a **runs** table: `| timestamp (UTC) | build job | wall-clock |`. Use the index's job names verbatim so the table
+greps cleanly, and add a job to the index the first time you run it. Record completed runs only — success or test
+failure, both are honest durations; a killed or hung run's duration is noise. Report wall-clock total plus any notably
+slow tasks.
 
 ## Hard limits
 

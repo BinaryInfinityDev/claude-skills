@@ -13,12 +13,17 @@ in-tree; anything long enough to tie up the working tree does not.
   worktree instead of composing a build command, and treat its machine verdict line as authoritative. The lock, the
   timing ledger, and cleanup still apply around it.
 - Name each worktree for the branch under test plus a random identifier (`<branch>-a1b2c3`), outside the primary tree.
-- **One build job at a time per session**, coordinated through `.claude/build-runner.lock` (never committed — gitignore
-  it). More concurrency means other sessions on other hosts, which requires the ref already pushed to a branch.
-- **Always clean the worktree up**, however the run ends. Copy out anything worth keeping — test reports, the key log —
-  before removal, and return those paths with the results.
-- Record completed runs in `.claude/build-timings.md` so future runs know what "normal" looks like; a run far past its
-  typical wall-clock is hung, not slow.
+  **A repo whose cold build dominates the run may instead keep one persistent verification worktree** (the
+  `../.{repo}-verify` pattern) and reuse its build state: still lock-guarded, checked out to the ref under test for each
+  run, and never used as a second development tree — it holds build products, not work.
+- **One build job at a time per session**, coordinated through the runner lock (`paths.runner_lock` in
+  `.claude/model-tier-policy.json`, default `.claude/build-runner.lock`; never committed — gitignore it). More
+  concurrency means other sessions on other hosts, which requires the ref already pushed to a branch.
+- **Always clean a per-run worktree up**, however the run ends. Copy out anything worth keeping — test reports, the key
+  log — before removal, and return those paths with the results. A persistent worktree is cleaned of run artifacts
+  (logs, reports) the same way, but keeps its build caches.
+- Record completed runs in the timing ledger (`paths.timings`, default `.claude/build-timings.md`) so future runs know
+  what "normal" looks like; a run far past its typical wall-clock is hung, not slow.
 
 ## Where fixes land
 

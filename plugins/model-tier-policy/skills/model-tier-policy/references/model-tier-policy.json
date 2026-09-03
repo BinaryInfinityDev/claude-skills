@@ -5,6 +5,14 @@
   "reminder_interval": 10,
   "orchestrator_mode": false,
   "bar_command": null,
+  "paths": {
+    "plans": ".claude/plans",
+    "decisions": ".claude/decisions",
+    "reviews": ".claude/reviews",
+    "timings": ".claude/build-timings.md",
+    "runner_lock": ".claude/build-runner.lock",
+    "operating_rules": ".claude/agent-operating-rules.md"
+  },
   "orchestrator_tools_allowed": [
     "^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"
   ],

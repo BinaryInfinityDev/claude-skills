@@ -17,6 +17,7 @@ instead of copy-and-forget.
 | `git-workflow`       | `start-session`, `end-session`                                                                         |
 | `project-management` | `ingest-artifact`, `record-decision`                                                                   |
 | `time-tracking`      | `session-timelog`, `time-report`                                                                       |
+| `technical-writing`  | `write-in-simplified-technical-english`                                                                |
 
 Installed plugins are versioned (`plugin.json` semver) and update through the marketplace: third-party marketplaces do
 not auto-update by default, so either toggle auto-update for `claude-skills` in `/plugin` → Marketplaces or pull updates
@@ -71,13 +72,14 @@ folded into a consolidated CSV and the tracking branch cleared.
 Eight roles, each pinned to a model: `orchestrator` (Opus 5) holds the session's main loop in the recommended topology
 and coordinates — tickets, plans, dispatch, never implementation; `architect` (Fable 5) frames and decides;
 `senior-developer` (Fable 5) implements the rare change too entangled to hand off as a plan; `executor` (Opus 5)
-implements; `code-reviewer` (Fable 5 for the first pass per PR, Opus 5 for follow-ups, read-only) reads the proven diff
-adversarially before the PR is marked ready; `scout` (Opus 5, read-only) investigates and returns findings instead of
-file contents; `devils-advocate` (Opus 5, read-only) optionally stress-tests a plan before anyone builds it; and
-`runner` (Sonnet 5) handles bulk mechanical work. Three specialists sit beside them: `build-runner` (Sonnet 5) proves a
-ref in an isolated git worktree — one build at a time, lock-enforced, timed against a ledger — `build-analyst` (Haiku
-4.5) triages failed-build logs from a path instead of re-running the build, and `git-steward` (Sonnet 5) commits and
-reconciles a coordinator's plan/tracker/addendum artifacts and keeps branches tidy, never touching feature work.
+implements; `code-reviewer` (Fable 5 for the first pass per PR, Opus 5 for follow-ups) reads the proven diff
+adversarially before the PR is marked ready and persists its findings file; `scout` (Opus 5, read-only) investigates and
+returns findings instead of file contents; `devils-advocate` (Opus 5, read-only) optionally stress-tests a plan before
+anyone builds it; and `runner` (Sonnet 5) handles bulk mechanical work. Three specialists sit beside them:
+`build-runner` (Sonnet 5) proves a ref in an isolated git worktree — one build at a time, lock-enforced, timed against a
+ledger — `build-analyst` (Haiku 4.5) triages failed-build logs from a path instead of re-running the build, and
+`git-steward` (Sonnet 5) commits and reconciles a coordinator's plan/tracker/addendum artifacts and keeps branches tidy,
+never touching feature work.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
@@ -91,6 +93,12 @@ and two hooks. A `PreToolUse` guard hard-denies edits, shell commands, workflows
 main loop is on the premium tier, and a `UserPromptSubmit` hook re-injects the policy periodically — in full every 10th
 turn and after every compaction, with a one-line marker in between — so it survives long sessions without the reminder
 itself becoming a context cost.
+
+### Technical Writing
+
+| Skill                                                                                                                    | Description                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [write-in-simplified-technical-english](plugins/technical-writing/skills/write-in-simplified-technical-english/SKILL.md) | ASD-STE100 responses — short, active-voice, unambiguous; the engineering intact |
 
 ## Agents
 
@@ -156,7 +164,8 @@ Rules are grouped by category: `rules/{category}/{rule-name}.md`.
 | Rule                                                                   | Description                                                                                          |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | [coordination-artifacts](rules/coordination/coordination-artifacts.md) | Plan / tracker / append-only addendum, each matched to its access pattern; steward and consolidation |
-| [state-discipline](rules/coordination/state-discipline.md)             | Verify repo state before asserting it; report state changes, never state observations                |
+| [state-discipline](rules/coordination/state-discipline.md)             | Verify repo state before asserting it; report changes, never observations; subscribe deliberately    |
+| [multi-agent-hygiene](rules/coordination/multi-agent-hygiene.md)       | Namespaced agent branches, fetch-before-create, never touch another agent's branch or scratch files  |
 
 The model-tier-policy installer installs this one automatically alongside the `build-runner` agent, since the agent's
 worktree and lock mechanics assume its session-side conventions; other repos can install it by hand as below.
