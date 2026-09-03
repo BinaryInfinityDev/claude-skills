@@ -24,6 +24,11 @@
       "name": "time-tracking",
       "source": "./plugins/time-tracking",
       "description": "Content-free session timelines on a tracking branch, pooled into time reports and timesheets"
+    },
+    {
+      "name": "technical-writing",
+      "source": "./plugins/technical-writing",
+      "description": "ASD-STE100 Simplified Technical English — responses and documentation in short, unambiguous, active-voice language"
     }
   ]
 }
