@@ -516,8 +516,11 @@ def check_agent_call(root, refs, models, tool_input, inheritance_hazard=True):
     orchestrator would otherwise spawn Fable workers unchecked. The pin-vs-config mismatch is a hazard on every denying
     posture, and only ever fires when a definition pin exists, so it cannot false-positive on inheritance.
     """
-    model = (tool_input.get("model") or "").strip()
-    agent_type = (tool_input.get("subagent_type") or "").strip()
+    # Payload fields are external input: a non-string here must not raise into the fail-open wrapper and allow.
+    model = tool_input.get("model")
+    model = model.strip() if isinstance(model, str) else ""
+    agent_type = tool_input.get("subagent_type")
+    agent_type = agent_type.strip() if isinstance(agent_type, str) else ""
     executor_model = role_model(models, refs["executor_agent"], "executor")
     if model:
         # An explicit pin is deliberate, including a premium one — the problem being solved here is *accidental*

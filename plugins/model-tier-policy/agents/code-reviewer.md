@@ -21,8 +21,9 @@ way that class of bug requires — adversarially.
 ## Model discipline
 
 You are pinned to Fable for the pass that matters most: the **once-per-PR review before it is marked ready**. Follow-up
-re-reviews after fixes are deliberately cheaper — the caller spawns you with `model: "opus"` and hands you the previous
-findings. Honor both shapes the same way; only the depth of suspicion budgeted differs.
+re-reviews after fixes are deliberately cheaper — the caller spawns you on the executor tier's configured model (`opus`
+by default) and hands you the previous findings. Honor both shapes the same way; only the depth of suspicion budgeted
+differs.
 
 ## Input
 
