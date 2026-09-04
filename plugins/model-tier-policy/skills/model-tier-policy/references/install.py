@@ -4,7 +4,9 @@
 Copies the rules file, pinned-model agents, hooks, and default config into <target>/.claude/, then merges the hook
 wiring into <target>/.claude/settings.json without disturbing existing settings.
 
-Idempotent: re-running updates the shipped files and leaves your config and any other hooks alone.
+Idempotent: re-running updates the installer-owned files (the policy rule, hooks, agents), seeds the discipline rules
+and the operating-rules file only when absent — a repo copy that differs is kept and the shipped version written beside
+it as .new — and leaves your config and any other hooks alone.
 
     python3 install.py --target /path/to/repo [--user] [--force] [--dry-run]
 
@@ -17,6 +19,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -28,10 +31,16 @@ AGENTS_SRC = os.path.join(PLUGIN_ROOT, "agents")
 HOOKS_SRC = os.path.join(PLUGIN_ROOT, "hooks")
 
 # (source relative to references/, destination relative to .claude/)
+# Installer-owned: always brought up to the shipped version. The policy rule IS the policy, not a repo convention.
 FILES = [
     ("rules/model-tier-policy.md", "rules/model-tier-policy.md"),
-    # For each rule below, the canonical copy lives in the repo-level rules/ catalog; these ship with the plugin so an
-    # installed plugin is self-contained. Keep each pair in sync (see CLAUDE.md).
+]
+# Seeded: created when absent, then the repo's. A repo that re-homed a discipline rule — its own bar, its own branch
+# scheme — must not have the edit silently reverted by a re-run; the shipped version lands beside it as <name>.md.new
+# (not a .md, so Claude Code never loads it) and the plan output reports the drift. For each, the canonical copy lives
+# in the repo-level rules/ catalog; these ship with the plugin so an installed plugin is self-contained. Keep each pair
+# in sync (see CLAUDE.md).
+SEEDED_RULES = [
     ("rules/build-discipline/worktree-builds.md", "rules/build-discipline/worktree-builds.md"),
     ("rules/coordination/coordination-artifacts.md", "rules/coordination/coordination-artifacts.md"),
     ("rules/coordination/state-discipline.md", "rules/coordination/state-discipline.md"),
@@ -52,6 +61,7 @@ HOOK_FILES = [
     ("context/orchestrator-brief.md", "hooks/context/orchestrator-brief.md"),
     ("context/worker.md", "hooks/context/worker.md"),
     ("context/worker-brief.md", "hooks/context/worker-brief.md"),
+    ("context/disabled.md", "hooks/context/disabled.md"),
 ]
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [
@@ -135,6 +145,12 @@ def stamp_source():
 # Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
 LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
+
+
+def same_content(a, b):
+    """True when two files have identical bytes; handles closed promptly rather than left to the collector."""
+    with open(a, "rb") as fa, open(b, "rb") as fb:
+        return fa.read() == fb.read()
 
 
 def load_json(path):
@@ -287,6 +303,19 @@ def main():
             sys.exit("error: missing source file %s" % src_path)
         verb = "update" if os.path.exists(dest_path) else "create"
         plan.append((verb, dest_path, src_path))
+    for src, dest in SEEDED_RULES:
+        src_path = os.path.join(HERE, src)
+        dest_path = os.path.join(claude, dest)
+        if not os.path.exists(src_path):
+            sys.exit("error: missing source file %s" % src_path)
+        if not os.path.exists(dest_path):
+            plan.append(("create", dest_path, src_path))
+        elif same_content(src_path, dest_path):
+            plan.append(("keep", dest_path, src_path))
+            if os.path.exists(dest_path + ".new"):
+                migrations.append(("remove", dest_path + ".new", "repo copy matches shipped again"))
+        else:
+            plan.append(("drift", dest_path, src_path))
 
     # The config is the user's file, not ours: re-runs only ADD newly shipped keys (so a repo picks up e.g. a new
     # bar_command default without losing the values it set), and --force — the full reset — backs the file up and
@@ -357,12 +386,46 @@ def main():
         user_paths = load_json(existing_cfg_path).get("paths")
         if isinstance(user_paths, dict):
             paths_cfg.update({k: v for k, v in user_paths.items() if isinstance(v, str) and v})
+    # Hand-installed agent copies get the configured model baked into their frontmatter pin: a local copy shadows
+    # the plugin's, so this is the one place a repo's override reaches an agent that is spawned without a model.
+    models_cfg = dict(shipped_cfg.get("models") or {})
+    if existing_cfg_path is not None and not args.force:
+        user_models = load_json(existing_cfg_path).get("models")
+        if isinstance(user_models, dict):
+            models_cfg.update({k: v for k, v in user_models.items() if isinstance(v, str) and v})
+
     op_rules_src = os.path.join(HERE, OPERATING_RULES_TEMPLATE)
     op_rules_dest = os.path.join(root, paths_cfg.get("operating_rules") or ".claude/agent-operating-rules.md")
     op_rules_create = os.path.exists(op_rules_src) and not os.path.exists(op_rules_dest)
 
-    for item in plan:
-        print("  %-6s %s" % (item[0], item[1]))
+    # A configured path that does not exist is the guard's quietest failure: writes to the configured location are
+    # allowed and writes to where the files actually live are denied, which reads as a broken hook. Only customized
+    # values are checked — a default .claude/plans that does not exist yet is the normal state before the first plan.
+    shipped_paths = shipped_cfg.get("paths") or {}
+    path_warnings = []
+    for key, value in sorted(paths_cfg.items()):
+        if not isinstance(value, str) or value == shipped_paths.get(key):
+            continue
+        located = os.path.join(root, value)
+        probe = located if key in ("plans", "decisions", "reviews") else os.path.dirname(located)
+        if not os.path.isdir(probe):
+            path_warnings.append(
+                "warning: paths.%s = %s names a directory that does not exist under %s.\n"
+                "         The guard will allow writes there and deny them wherever the files actually live — which\n"
+                "         reads as a broken hook. Create the directory or fix the path." % (key, value, root)
+            )
+
+    for warning in path_warnings:
+        print(warning)
+    for verb, dest_path, _src in plan:
+        note = ""
+        if verb == "drift":
+            note = " (repo copy differs from shipped and is kept; shipped version written to %s.new)" % os.path.basename(
+                dest_path
+            )
+        elif verb == "keep":
+            note = " (seeded rule, matches shipped)"
+        print("  %-6s %s%s" % (verb, dest_path, note))
     print("  %-6s %s%s" % (config_action, config_dest, config_note))
     for key, members in sorted(stale_members.items()):
         print(
@@ -391,12 +454,28 @@ def main():
             except OSError:
                 pass
 
-    for item in plan:
-        if item[0] == "keep":
+    for verb, dest_path, src_path in plan:
+        if verb == "keep":
             continue
-        _, dest_path, src_path = item
+        if verb == "drift":
+            shutil.copyfile(src_path, dest_path + ".new")
+            continue
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        shutil.copyfile(src_path, dest_path)
+        role = os.path.splitext(os.path.basename(dest_path))[0]
+        configured = models_cfg.get(role) if os.path.basename(os.path.dirname(dest_path)) == "agents" else None
+        # A configured value goes into YAML frontmatter verbatim, so it must be a plain token — anything else would
+        # break the definition's frontmatter silently (Claude Code drops all fields on a parse error).
+        if configured and not re.match(r"^[A-Za-z0-9._-]+$", configured):
+            print("warning: models.%s = %r is not a plain model id; the shipped pin is kept" % (role, configured))
+            configured = None
+        if configured:
+            with open(src_path, encoding="utf-8") as fh:
+                text = fh.read()
+            text, swapped = re.subn(r"^(model:\s*).*$", r"\g<1>%s" % configured, text, count=1, flags=re.MULTILINE)
+            with open(dest_path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        else:
+            shutil.copyfile(src_path, dest_path)
         if dest_path.endswith(".py"):
             os.chmod(dest_path, 0o755)
 

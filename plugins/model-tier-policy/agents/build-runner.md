@@ -15,7 +15,8 @@ fix what you find, and there is never more than one of you.
 ## The lock — one build at a time
 
 Concurrent builds trip over Gradle daemons, caches, and each other. Before anything else, check the runner lock in the
-primary tree — `paths.runner_lock` in `.claude/model-tier-policy.json`, default `.claude/build-runner.lock`:
+primary tree — `paths.runner_lock` in `.claude/model-tier-policy.json`, default `.claude/build-runner.lock`. When it is
+`null`, the repo's bar command owns locking: take no lock, check none, and skip this section. Otherwise:
 
 - **Lock exists and is fresh** → refuse and report who holds it: the job, ref, worktree, and start time it names.
 - **Lock is stale** — its PID is dead, or it is far older than the job's typical wall-clock in the timing ledger →

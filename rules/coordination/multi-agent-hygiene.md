@@ -6,7 +6,9 @@ where they collide. Three incidents in two trial runs, all the same class: two w
 ## Branches
 
 - **Namespace the branches you create.** A branch name carries its creator: `<role>/<slug>-<id>` (the id a short random
-  suffix), so two agents never reach for the same name and a stale branch names its owner.
+  suffix), so two agents never reach for the same name and a stale branch names its owner. A branch the harness assigned
+  to the session — Claude Code Remote's `claude/<slug>-<id>` — is already namespaced: keep it. This rule is about names
+  you create, never a request to rename the one you were given.
 - **Fetch before you create.** A name that is free locally may exist on the remote; creating over it silently forks
   history. `git fetch origin <name>` first, and if the name is taken, pick another — never reuse it.
 - **Never create onto or rename onto a live name**, and **never rename, reset, or force-push a branch another agent

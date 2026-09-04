@@ -16,6 +16,19 @@
   "orchestrator_tools_allowed": [
     "^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"
   ],
+  "models": {
+    "orchestrator": "opus",
+    "architect": "fable",
+    "senior-developer": "fable",
+    "executor": "opus",
+    "code-reviewer": "fable",
+    "scout": "opus",
+    "devils-advocate": "opus",
+    "runner": "sonnet",
+    "build-runner": "sonnet",
+    "build-analyst": "haiku",
+    "git-steward": "sonnet"
+  },
   "executor_agent": "executor",
   "runner_agent": "runner",
   "scout_agent": "scout",

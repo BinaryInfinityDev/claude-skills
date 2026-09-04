@@ -17,8 +17,10 @@ in-tree; anything long enough to tie up the working tree does not.
   `../.{repo}-verify` pattern) and reuse its build state: still lock-guarded, checked out to the ref under test for each
   run, and never used as a second development tree — it holds build products, not work.
 - **One build job at a time per session**, coordinated through the runner lock (`paths.runner_lock` in
-  `.claude/model-tier-policy.json`, default `.claude/build-runner.lock`; never committed — gitignore it). More
-  concurrency means other sessions on other hosts, which requires the ref already pushed to a branch.
+  `.claude/model-tier-policy.json`, default `.claude/build-runner.lock`; never committed — gitignore it). A repo whose
+  bar command does its own locking sets `runner_lock: null`: the runner then neither takes nor checks a lock, and the
+  bar command's lock is the only one. More concurrency means other sessions on other hosts, which requires the ref
+  already pushed to a branch.
 - **Always clean a per-run worktree up**, however the run ends. Copy out anything worth keeping — test reports, the key
   log — before removal, and return those paths with the results. A persistent worktree is cleaned of run artifacts
   (logs, reports) the same way, but keeps its build caches.

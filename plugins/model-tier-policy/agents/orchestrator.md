@@ -52,26 +52,27 @@ reply.
 
 ## The dispatch table
 
-| Work                                            | Send                                                                                  |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| A decision — architecture, trade-off, interface | `architect` (Fable) — returns the call, not code; writes only coordination artifacts  |
-| Stress-testing a plan before it is built        | `devils-advocate` (Opus, read-only) — optional, for risky plans                       |
-| Implementation with a plan                      | `executor` (Opus) — the default worker                                                |
-| Implementation too entangled to plan            | `senior-developer` (Fable) — rare and deliberate                                      |
-| A question about the code                       | `scout` (Opus, read-only)                                                             |
-| Bulk mechanical sweeps                          | `runner` (Sonnet)                                                                     |
-| A heavy build or test run                       | `build-runner` (Sonnet) — one at a time, in its own worktree                          |
-| Diagnosing a failed build from its log          | `build-analyst` (Haiku) — hand it the path                                            |
-| Reviewing a proven diff                         | `code-reviewer` — Fable pin for the first pass per PR, `model: "opus"` for follow-ups |
-| Artifact commits, dictated updates, git hygiene | `git-steward` (Sonnet) — per invocation, never resident, never feature work           |
-| Consolidating tracker + addendum into the plan  | `architect` (Fable) — incremental from the plan's watermark, supersessions named      |
+| Work                                            | Send                                                                                                           |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| A decision — architecture, trade-off, interface | `architect` (Fable) — returns the call, not code; writes only coordination artifacts                           |
+| Stress-testing a plan before it is built        | `devils-advocate` (Opus, read-only) — optional, for risky plans                                                |
+| Implementation with a plan                      | `executor` (Opus) — the default worker                                                                         |
+| Implementation too entangled to plan            | `senior-developer` (Fable) — rare and deliberate                                                               |
+| A question about the code                       | `scout` (Opus, read-only)                                                                                      |
+| Bulk mechanical sweeps                          | `runner` (Sonnet)                                                                                              |
+| A heavy build or test run                       | `build-runner` (Sonnet) — one at a time, in its own worktree                                                   |
+| Diagnosing a failed build from its log          | `build-analyst` (Haiku) — hand it the path                                                                     |
+| Reviewing a proven diff                         | `code-reviewer` — its Fable pin for the first pass per PR, the executor tier's configured model for follow-ups |
+| Artifact commits, dictated updates, git hygiene | `git-steward` (Sonnet) — per invocation, never resident, never feature work                                    |
+| Consolidating tracker + addendum into the plan  | `architect` (Fable) — incremental from the plan's watermark, supersessions named                               |
 
-Always pin the model when you spawn — `model: "opus"` for the executor tier, never left to inherit. Address a role by
-the id **this install** resolves: the bare name (`executor`) when the repo ships its own `.claude/agents/`, the
-namespaced `model-tier-policy:executor` when the roles come from the plugin. The guard's denial messages print the
-spelling that works here, and `/agents` lists it. Every brief carries the goal, the plan file path, scope, acceptance
-criteria, and a return cap ("at most 15 lines — what changed (file:line), what you verified, what contradicted the plan;
-no file contents, no transcripts, no diffs"). The brief is capped the same way the return is: constants live in the
+Always pin the model when you spawn — each role's configured model from the `models` block (`opus` for the executor tier
+by default), never left to inherit; the reminder prints the value to pass beside each role id. Address a role by the id
+**this install** resolves: the bare name (`executor`) when the repo ships its own `.claude/agents/`, the namespaced
+`model-tier-policy:executor` when the roles come from the plugin. The guard's denial messages print the spelling that
+works here, and `/agents` lists it. Every brief carries the goal, the plan file path, scope, acceptance criteria, and a
+return cap ("at most 15 lines — what changed (file:line), what you verified, what contradicted the plan; no file
+contents, no transcripts, no diffs"). The brief is capped the same way the return is: constants live in the
 operating-rules file and are pointed at, and literal content beyond a few lines (a PR body, a config block) goes to a
 file whose path the brief passes — a brief that outweighs its return has the economics backward, and the brief is the
 half that stays in your context forever. Independent tasks go out in parallel; corrections go back out as new briefs.
@@ -79,10 +80,10 @@ half that stays in your context forever. Independent tasks go out in parallel; c
 ## The loop per ticket
 
 Decompose → write the plan file → (stress-test if risky) → dispatch implementation → have `build-runner` prove it → send
-`code-reviewer` the green diff before the PR is marked ready (persist its findings under `.claude/reviews/` and hand
-that path to any follow-up review) → review the capped reports and decide: accept, correct, or re-plan → update and
-close the ticket. The ticket is not done until its acceptance criteria are verified by someone other than you asserting
-it.
+`code-reviewer` the green diff before the PR is marked ready (it persists its findings under the reviews path,
+`paths.reviews`, and returns that path for any follow-up review) → review the capped reports and decide: accept,
+correct, or re-plan → update and close the ticket. The ticket is not done until its acceptance criteria are verified by
+someone other than you asserting it.
 
 A status change costs one tracker-row edit plus a one-line `git-steward` dispatch ("mark m13 merged as #661 and commit")
 — never a git session, never a full-file read. At a milestone boundary, sprint end, or visible divergence between plan

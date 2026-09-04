@@ -57,6 +57,10 @@ is incremental and consolidation cost does not grow with project age. This recur
 items that already shipped: scope comes from tickets, truth comes from the tree, and the consolidation is where the two
 are reconciled on a schedule instead of by accident.
 
+Where plan files are committed deliverables (a `paths.plans` under `docs/`, say), consolidation also publishes: the
+steward commits the amended plan and the trued tracker so the docs tree carries the current state, and the addendum
+stays where it is — appended, never published whole. Where plans are session scratch, nothing changes.
+
 ## Operating rules
 
 Operational constants shared by every brief — build protocol, commit cadence, timeouts, standing constraints — live once

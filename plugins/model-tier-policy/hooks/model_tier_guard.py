@@ -27,7 +27,8 @@ DEFAULTS = {
     "read_budget": 8,
     "reminder_interval": 10,  # consumed by model_tier_context.py, which shares this loader
     "orchestrator_mode": False,
-    # Tools the orchestrator may use even though they mutate external state: tickets are its work product.
+    # Tools a coordinating session may use even though they mutate external state — on the premium posture as much
+    # as the orchestrator one, because tickets are the plan's home on either. The key's name predates that.
     "orchestrator_tools_allowed": [r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"],
     # Where the policy's file conventions live in THIS repo. Every rule, role, and reminder that names one of these
     # paths defers to this block, so a repo that keeps plans in docs/plans/ declares it once here instead of bending
@@ -40,6 +41,24 @@ DEFAULTS = {
         "timings": ".claude/build-timings.md",
         "runner_lock": ".claude/build-runner.lock",
         "operating_rules": ".claude/agent-operating-rules.md",
+    },
+    # The model each role runs on. These are the shipped frontmatter pins; a repo overrides per role. At spawn time an
+    # explicit `model` argument beats the definition's pin and a plugin's cache is read-only, so the config becomes
+    # effective by being *passed*: the reminders and denials print each role with its configured model, the guard
+    # refuses an unpinned premium-posture spawn whose definition pin differs from it, and hand installs bake it into
+    # the agent copies. Values are Claude Code aliases (haiku/sonnet/opus/fable) or full ids; comparisons go by tier.
+    "models": {
+        "orchestrator": "opus",
+        "architect": "fable",
+        "senior-developer": "fable",
+        "executor": "opus",
+        "code-reviewer": "fable",
+        "scout": "opus",
+        "devils-advocate": "opus",
+        "runner": "sonnet",
+        "build-runner": "sonnet",
+        "build-analyst": "haiku",
+        "git-steward": "sonnet",
     },
     "executor_agent": "executor",
     "runner_agent": "runner",
@@ -68,6 +87,11 @@ DEFAULTS = {
         r"|unresolve|run_|actions_run|issue_write|pull_request_review_write)",
     ],
 }
+
+# Path keys that accept null as an explicit opt-out. runner_lock: null means the repo's bar command owns locking and
+# the build runner neither takes nor checks a lock. The other keys are interpolated into the reminder text and named
+# by the rules, so a null there is nonsense and keeps the default.
+NULLABLE_PATHS = {"runner_lock"}
 
 # The namespace Claude Code registers this policy's agents under when they are served by the plugin rather than by
 # `.claude/agents/` copies. Only a plugin-served agent needs it; see agent_ref.
@@ -197,6 +221,8 @@ def resolved_paths(cfg):
         for key, value in user.items():
             if isinstance(value, str) and value:
                 paths[key] = value
+            elif value is None and key in NULLABLE_PATHS:
+                paths[key] = None
     return paths
 
 
@@ -214,6 +240,114 @@ def paths_write_globs(paths):
     if paths.get("operating_rules"):
         globs.append(paths["operating_rules"])
     return globs
+
+
+# Cheapest to costliest. A model id is placed by the alias it contains, so "claude-opus-5" and "opus" compare equal.
+MODEL_TIERS = ("haiku", "sonnet", "opus", "fable")
+
+
+def model_alias(value):
+    """The tier alias a model id or alias names, or None when it names none of the known tiers."""
+    text = value.lower() if isinstance(value, str) else ""
+    for alias in MODEL_TIERS:
+        if alias in text:
+            return alias
+    return None
+
+
+def model_tier(value):
+    """Position in MODEL_TIERS, or None for an unrecognized model."""
+    alias = model_alias(value)
+    return MODEL_TIERS.index(alias) if alias else None
+
+
+def resolved_models(cfg):
+    """The models block with defaults filled in for every role the user's config left out (same reason as paths)."""
+    models = dict(DEFAULTS["models"])
+    user = cfg.get("models")
+    if isinstance(user, dict):
+        for key, value in user.items():
+            if isinstance(value, str) and value:
+                models[key] = value
+    return models
+
+
+def role_model(models, agent_name, fallback_role):
+    """The configured model for an agent name, falling back to the shipped role's when the name is a custom one."""
+    return models.get(agent_name) or models.get(fallback_role) or "opus"
+
+
+def cfg_pattern(cfg):
+    """The premium-model regex, falling back to the shipped default when the config value is not a usable string.
+
+    A `"premium_model_pattern": null` must not turn into no denials and no reminder: with the exception swallowed by
+    both hooks' fail-open wrappers, that would be the policy going quiet without saying so.
+    """
+    value = cfg.get("premium_model_pattern")
+    if isinstance(value, str) and value:
+        try:
+            re.compile(value, re.IGNORECASE)
+            return value
+        except re.error:
+            pass
+    return DEFAULTS["premium_model_pattern"]
+
+
+def cfg_list(cfg, key):
+    """A list-of-strings config value, or the shipped default when the config holds something else."""
+    value = cfg.get(key)
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    return DEFAULTS[key]
+
+
+def cfg_int(cfg, key):
+    """A non-negative integer config value, or the shipped default when the config holds something else.
+
+    `int(cfg["read_budget"])` on a malformed value would raise into the fail-open wrapper and allow the call — the
+    read budget switched off for that call with nothing said, the same quiet failure the other config reads guard.
+    """
+    value = cfg.get(key)
+    if isinstance(value, bool):
+        return DEFAULTS[key]
+    if isinstance(value, int):
+        return value if value >= 0 else DEFAULTS[key]
+    if isinstance(value, str):
+        try:
+            parsed = int(value.strip())
+            return parsed if parsed >= 0 else DEFAULTS[key]
+        except ValueError:
+            pass
+    return DEFAULTS[key]
+
+
+def premium_model(cfg, model):
+    """True when the session model matches the premium pattern — independent of posture (see the Agent gate)."""
+    return isinstance(model, str) and bool(re.search(cfg_pattern(cfg), model, re.IGNORECASE))
+
+
+def posture(cfg, model):
+    """Which posture the guard and the reminder take for this session: premium, orchestrator, worker, or disabled.
+
+    One resolver for both hooks, so a denial and the reminder that explains it can never disagree.
+
+    With orchestrator mode on, the orchestrator role has a configured model and the session is expected to run on it
+    — or below; a cheaper coordinator is fine. A session opened on a *higher* tier than the configured orchestrator
+    is off-design, and the policy stands down rather than fight it: "disabled", which the guard treats as allow-all
+    and the reminder announces every turn, since a policy that goes quiet is the failure this plugin exists to avoid.
+    An unrecognized model id on either side keeps the pre-enforcement behavior (premium pattern, else orchestrator).
+    With orchestrator mode off nothing changes: the premium pattern decides between premium and worker.
+    """
+    if not isinstance(model, str) or not model:
+        return "worker"
+    is_premium = premium_model(cfg, model)
+    if orchestrator_active(cfg):
+        session_tier = model_tier(model)
+        expected_tier = model_tier(resolved_models(cfg)["orchestrator"])
+        if session_tier is not None and expected_tier is not None:
+            return "disabled" if session_tier > expected_tier else "orchestrator"
+        return "premium" if is_premium else "orchestrator"
+    return "premium" if is_premium else "worker"
 
 
 def orchestrator_active(cfg):
@@ -364,62 +498,94 @@ def agent_refs(root, cfg):
     }
 
 
-def agent_pins_model(root, agent_type):
-    """True when the named agent definition pins a model of its own — premium or not.
+def agent_pin(root, agent_type):
+    """The model the named agent definition pins, or None when it has no definition, no pin, or pins `inherit`.
 
-    The hazard this guard exists for is *accidental* inheritance: an unpinned spawn silently running on the premium
-    tier because `model` defaults to `inherit`. An agent file that names its own model cannot inherit, so it is not
-    that hazard, and that holds whether the pin is cheap or premium. A premium pin in an agent definition is the same
-    kind of deliberate escalation as passing `model="fable"` at the call site, which the caller above already allows —
-    `senior-developer` is exactly that, and rejecting it would send the caller to the executor tier for work the role
-    exists to take off it.
-
-    Plugin-served agents are visible too: when the policy runs as a plugin there may be no `.claude/agents` copies at
-    all (the installer's files-only mode removes them). Without that, every plugin agent would read as unpinned and the
-    guard would demand an explicit model for definitions that already pin one.
+    The hazard the inheritance check exists for is *accidental* inheritance: an unpinned spawn silently running on the
+    premium tier because `model` defaults to `inherit`. An agent file that names its own model cannot inherit, so it is
+    not that hazard, and that holds whether the pin is cheap or premium — `senior-developer`'s Fable pin is the same
+    deliberate escalation as passing `model="fable"` at the call site. Plugin-served agents are visible too: when the
+    policy runs as a plugin there may be no `.claude/agents` copies at all (the installer's files-only mode removes
+    them), and without them every plugin agent would read as unpinned.
     """
     path, _ = find_agent_definition(root, agent_type)
     if path is None:
-        return False
+        return None
     try:
         head = open(path, encoding="utf-8").read(4096)
     except Exception:
-        return False
+        return None
     match = re.search(r"^model:\s*['\"]?([\w.\-]+)", head, re.MULTILINE)
-    if not match:
-        return False
-    return match.group(1).strip() != "inherit"
+    if not match or match.group(1).strip() == "inherit":
+        return None
+    return match.group(1).strip()
 
 
-def check_agent_call(root, refs, tool_input, premium):
-    """Reject subagent spawns that would run on the premium tier."""
-    model = (tool_input.get("model") or "").strip()
-    agent_type = (tool_input.get("subagent_type") or "").strip()
+def bare_agent(agent_type):
+    """The role name behind a possibly namespaced subagent_type — the key the models block uses."""
+    if agent_type.startswith(PLUGIN_NAME + ":"):
+        return agent_type[len(PLUGIN_NAME) + 1 :]
+    return agent_type
+
+
+def check_agent_call(root, refs, models, tool_input, inheritance_hazard=True):
+    """Reject subagent spawns that would run on the premium tier, or that would silently ignore the configured model.
+
+    Two hazards, gated separately. Inheritance — an unpinned spawn running on the parent's model — is a hazard exactly
+    when the *session model* is premium, whatever posture it holds: a Fable session running as the configured
+    orchestrator would otherwise spawn Fable workers unchecked. The pin-vs-config mismatch is a hazard on every denying
+    posture, and only ever fires when a definition pin exists, so it cannot false-positive on inheritance.
+    """
+    # Payload fields are external input: a non-string here must not raise into the fail-open wrapper and allow.
+    model = tool_input.get("model")
+    model = model.strip() if isinstance(model, str) else ""
+    agent_type = tool_input.get("subagent_type")
+    agent_type = agent_type.strip() if isinstance(agent_type, str) else ""
+    executor_model = role_model(models, refs["executor_agent"], "executor")
     if model:
         # An explicit pin is deliberate, including a premium one — the problem being solved here is *accidental*
         # inheritance, not a considered escalation.
         return None
-    if agent_type.lower() in UNPINNED_OK:
+    if inheritance_hazard and agent_type.lower() in UNPINNED_OK:
         return None
-    if agent_type.lower() in NEVER_UNPINNED:
+    if inheritance_hazard and agent_type.lower() in NEVER_UNPINNED:
         return (
             "Model tier policy: `%s` always inherits the parent model, so this would run on the premium tier.\n"
-            "Use the `%s` agent instead, or pass model: \"opus\"." % (agent_type, refs["executor_agent"])
+            "Use the `%s` agent instead, or pass model: \"%s\"." % (agent_type, refs["executor_agent"], executor_model)
         )
-    if agent_type and agent_pins_model(root, agent_type):
+    pin = agent_pin(root, agent_type) if agent_type else None
+    if pin:
+        # The definition pins a model, so this is not the inheritance hazard — but an unpinned spawn means the
+        # definition's pin wins, and if the repo configured a different model for this role, the config would be
+        # ignored without anyone noticing. Make the caller pass it.
+        configured = models.get(bare_agent(agent_type))
+        if configured and model_alias(configured) and model_alias(pin) and model_alias(configured) != model_alias(pin):
+            return (
+                "Model tier policy: the config sets `%s` to model \"%s\" but its definition pins \"%s\", and this "
+                "spawn passes no model — the definition would win and the config would be silently ignored.\n"
+                "Re-issue with the configured model: Agent(subagent_type=\"%s\", model=\"%s\", prompt=...)"
+                % (bare_agent(agent_type), configured, pin, agent_type, configured)
+            )
         return None
+    if not inheritance_hazard:
+        return None  # a worker-tier coordinator: inheritance lands on its own tier, which is fine
     return (
         "Model tier policy: a subagent's model defaults to `inherit`, so this spawn would run on the premium tier —\n"
         "the most expensive possible way to do procedural work.\n"
-        "Re-issue with the model pinned: Agent(subagent_type=\"%s\", model=\"opus\", prompt=...)\n"
-        "Agents available: %s (Opus, implementation), %s (Sonnet, bulk mechanical), %s (Opus, read-only research).\n"
-        "For work that genuinely needs the premium tier to write the code, `%s` pins Fable itself."
+        "Re-issue with the model pinned: Agent(subagent_type=\"%s\", model=\"%s\", prompt=...)\n"
+        "Agents available: %s (%s, implementation), %s (%s, bulk mechanical), %s (%s, read-only research).\n"
+        "For work that genuinely needs the premium tier to write the code, `%s` pins %s itself."
         % (
             refs["executor_agent"],
+            executor_model,
             refs["executor_agent"],
+            executor_model,
             refs["runner_agent"],
+            role_model(models, refs["runner_agent"], "runner"),
             refs["scout_agent"],
+            role_model(models, refs["scout_agent"], "scout"),
             refs["senior_agent"],
+            role_model(models, refs["senior_agent"], "senior-developer"),
         )
     )
 
@@ -442,16 +608,14 @@ def main():
     if not cfg.get("enabled", True):
         allow()
 
-    try:
-        premium = re.compile(cfg["premium_model_pattern"], re.IGNORECASE)
-    except re.error:
-        allow()
-
     model = live_model(payload.get("transcript_path"))
-    is_premium = bool(model) and bool(premium.search(model))
-    as_orchestrator = bool(model) and not is_premium and orchestrator_active(cfg)
-    if not is_premium and not as_orchestrator:
-        allow()  # fail open: unknown model, or a worker tier with no orchestrator marker
+    stance = posture(cfg, model)
+    if stance in ("worker", "disabled"):
+        # worker: unknown model or a worker tier with no orchestrator marker — fail open. disabled: orchestrator mode
+        # on a session running above the orchestrator's configured tier; the reminder hook says so every turn.
+        allow()
+    is_premium = stance == "premium"
+    models = resolved_models(cfg)
 
     # One denial machinery serves two postures. What differs is why: the premium tier is kept off procedural work to
     # protect its context budget; an orchestrator session is kept off it because coordination is its whole job.
@@ -467,29 +631,31 @@ def main():
     # answers to `model-tier-policy:<role>`, and an instruction the model cannot follow makes the denial look like a
     # broken environment instead of a policy.
     refs = agent_refs(root, cfg)
+    executor_model = role_model(models, refs["executor_agent"], "executor")
     delegate_hint = (
-        "Delegate it: Agent(subagent_type=\"%s\", model=\"opus\", prompt=<goal, plan file path, scope, "
-        "acceptance criteria, and a return cap of 15 lines>)." % refs["executor_agent"]
+        "Delegate it: Agent(subagent_type=\"%s\", model=\"%s\", prompt=<goal, plan file path, scope, "
+        "acceptance criteria, and a return cap of 15 lines>)." % (refs["executor_agent"], executor_model)
     )
 
     if tool in ("Agent", "Task"):  # the subagent-spawn tool is named Task in some Claude Code builds
-        # Orchestrator spawns are never gated: inheritance lands on the worker tier it already runs on, and an
-        # explicit premium pin is the same deliberate escalation it is for everyone else.
-        if is_premium:
-            reason = check_agent_call(root, refs, tool_input, premium)
-            if reason:
-                deny(reason)
+        # The inheritance hazard follows the session's *model*, not its posture: an orchestrator configured to run on
+        # Fable would otherwise spawn Fable workers unchecked. A worker-tier orchestrator's unpinned spawns land on its
+        # own tier, which is fine — but a definition pin that disagrees with the configured model is caught on every
+        # denying posture, or the models block would be advisory in the recommended topology.
+        reason = check_agent_call(root, refs, models, tool_input, inheritance_hazard=premium_model(cfg, model))
+        if reason:
+            deny(reason)
         allow()
 
-    if as_orchestrator and matches_any(cfg["orchestrator_tools_allowed"], tool):
-        allow()  # tickets are the orchestrator's work product, not procedural drift
+    if matches_any(cfg_list(cfg, "orchestrator_tools_allowed"), tool):
+        allow()  # tickets are the plan's home on either posture — coordination's work product, not procedural drift
 
-    if matches_any(cfg["procedural_tools_denied"], tool):
+    if matches_any(cfg_list(cfg, "procedural_tools_denied"), tool):
         if tool in WRITE_TOOLS:
             target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
             # The configured paths imply their own write permission — write_allowed extends the set, it is not the
             # only source. A repo that declares "plans": "docs/plans" gets docs/plans/** writable with no second entry.
-            effective = list(cfg["write_allowed"])
+            effective = list(cfg_list(cfg, "write_allowed"))
             for glob in paths_write_globs(resolved_paths(cfg)):
                 if glob not in effective:
                     effective.append(glob)
@@ -503,14 +669,14 @@ def main():
 
         if tool in ("Bash", "BashOutput", "KillShell"):
             command = tool_input.get("command") or ""
-            if command and matches_any(cfg["bash_allowed"], command):
+            if command and matches_any(cfg_list(cfg, "bash_allowed"), command):
                 allow()
             # The most common denied command in a coordinating session is a git commit of its own artifacts — the
             # uncommitted-state nag loop. Point that case at the steward, whose whole job it is.
             steward_hint = (
                 '\nFor committing or pushing coordination artifacts (plan, tracker, addendum, decisions), the '
-                'steward is the delegation: Agent(subagent_type="%s", model="sonnet", prompt=<the one-line '
-                "instruction>)." % refs["steward_agent"]
+                'steward is the delegation: Agent(subagent_type="%s", model="%s", prompt=<the one-line '
+                "instruction>)." % (refs["steward_agent"], role_model(models, refs["steward_agent"], "git-steward"))
                 if re.search(r"\bgit\b", command)
                 else ""
             )
@@ -525,29 +691,25 @@ def main():
                 deny(
                     "Model tier policy: workflow agents inherit the main-loop model, so this would run the whole "
                     "fan-out on the premium tier (%s).\nDelegate the orchestration instead: "
-                    "Agent(subagent_type=\"%s\", model=\"opus\", prompt=<the workflow goal and plan file path>)."
-                    % (model, refs["executor_agent"])
+                    "Agent(subagent_type=\"%s\", model=\"%s\", prompt=<the workflow goal and plan file path>)."
+                    % (model, refs["executor_agent"], executor_model)
                 )
             deny(
                 "Model tier policy: you are running as the orchestrator — orchestration happens by dispatching "
                 "agents with pinned models, not by running workflows.\nDelegate: Agent(subagent_type=\"%s\", "
-                "model=\"opus\", prompt=<the goal and plan file path>)." % refs["executor_agent"]
+                "model=\"%s\", prompt=<the goal and plan file path>)." % (refs["executor_agent"], executor_model)
             )
 
-        extra = (
-            ""
-            if is_premium
-            else "\nTicket tools the orchestrator owns are allowed via orchestrator_tools_allowed in the config."
-        )
         deny(
-            "Model tier policy: %s mutates external state and you are %s.\n%s%s" % (tool, role, delegate_hint, extra)
+            "Model tier policy: %s mutates external state and you are %s.\n%s\nTicket tools are allowed on either "
+            "posture via orchestrator_tools_allowed in the config." % (tool, role, delegate_hint)
         )
 
-    budget = int(cfg.get("read_budget") or 0)
+    budget = cfg_int(cfg, "read_budget")
     turn_key = payload.get("prompt_id")
     # No prompt_id means turns cannot be told apart, and a session-keyed counter would never reset — the budget would
     # lock reads out for the whole session after 8 calls. Fail open instead, like every other degraded input here.
-    if budget > 0 and turn_key and matches_any(cfg["research_tools_allowed"], tool):
+    if budget > 0 and turn_key and matches_any(cfg_list(cfg, "research_tools_allowed"), tool):
         session_key = payload.get("session_id") or "session"
         count = bump_read_count(session_key, turn_key, payload.get("tool_use_id"))
         if count > budget:
@@ -559,9 +721,9 @@ def main():
             )
             deny(
                 "Model tier policy: orientation budget spent (%d/%d reads this turn) and you are %s. %s\n"
-                "Send a scout instead: Agent(subagent_type=\"%s\", model=\"opus\", prompt=<the question, the paths to "
+                "Send a scout instead: Agent(subagent_type=\"%s\", model=\"%s\", prompt=<the question, the paths to "
                 "search, and 'return findings only — no file contents, max 15 lines'>)."
-                % (count, budget, role, scarcity, refs["scout_agent"])
+                % (count, budget, role, scarcity, refs["scout_agent"], role_model(models, refs["scout_agent"], "scout"))
             )
 
     allow()

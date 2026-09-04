@@ -23,7 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import agent_ref, load_config, live_model, orchestrator_active, project_dir, resolved_paths
+    from model_tier_guard import agent_ref, load_config, live_model, posture, project_dir, resolved_models, resolved_paths
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -117,11 +117,6 @@ def main():
     if not model:
         sys.exit(0)
 
-    try:
-        premium = re.compile(cfg["premium_model_pattern"], re.IGNORECASE)
-    except re.error:
-        sys.exit(0)
-
     event = payload.get("hook_event_name", "UserPromptSubmit")
     anchor = event in ANCHOR_EVENTS
     try:
@@ -153,13 +148,26 @@ def main():
         # The reminder text names file locations; they follow the repo's configured paths, not the shipped defaults.
         "plans": resolved_paths(cfg)["plans"].rstrip("/"),
     }
-    if premium.search(model):
-        name = "premium"
-    elif orchestrator_active(cfg):
-        name = "orchestrator"
-    else:
-        name = "worker"
-    context = render(name if full else name + "-brief", values)
+    # Each role's configured model rides beside its id: the fragments tell the coordinator what to pass, and a
+    # spawn that passes the configured model is the only way a repo's override reaches a plugin-served agent.
+    models = resolved_models(cfg)
+    values.update(
+        {
+            "executor_model": models.get(cfg["executor_agent"]) or models["executor"],
+            "runner_model": models.get(cfg["runner_agent"]) or models["runner"],
+            "scout_model": models.get(cfg["scout_agent"]) or models["scout"],
+            "senior_model": models.get(cfg["senior_agent"]) or models["senior-developer"],
+            "architect_model": models.get(cfg["architect_agent"]) or models["architect"],
+            "steward_model": models.get(cfg["steward_agent"]) or models["git-steward"],
+            "build_runner_model": models["build-runner"],
+            "code_reviewer_model": models["code-reviewer"],
+            "orchestrator_model": models["orchestrator"],
+        }
+    )
+    name = posture(cfg, model)
+    # A disabled policy announces itself on every turn — one line, no brief variant — because a policy that has
+    # gone quiet is indistinguishable from one that is working.
+    context = render("disabled", values) if name == "disabled" else render(name if full else name + "-brief", values)
 
     print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
 

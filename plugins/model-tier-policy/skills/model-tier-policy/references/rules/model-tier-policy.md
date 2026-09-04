@@ -19,6 +19,12 @@ Spell a role's `subagent_type` the way this install resolves it: bare (`executor
 `.claude/agents/`, namespaced (`model-tier-policy:executor`) when the roles come from the plugin — a plugin-served agent
 does not answer to the bare name. The hook denials and reminders print the id that resolves here; copy it verbatim.
 
+The models in the table are the shipped defaults. A repo overrides them per role in the `models` block of
+`.claude/model-tier-policy.json`; the reminders and denials print each role with its configured model, and every spawn
+passes that model explicitly — a plugin-served agent's own pin is only the fallback, and the guard refuses an unpinned
+spawn whose pin disagrees with the config. The orchestrator's model is enforced against the session: a session opened
+above it disables the policy for that session, with a notice every turn.
+
 The **senior developer** is the one premium-tier role that writes code — for work that cannot be reduced to a plan an
 executor could carry out. It may change the approach but not the goal, and it delegates its own reading to `scout` and
 its own mechanical sweeps to `runner`/`executor`. If a plan can be written, write the plan and send an executor.
@@ -47,11 +53,12 @@ with a tighter cap instead.
 
 You may write plan, decision, and review files, and spend a small orientation budget of reads (8 per turn,
 hook-enforced). Past that, send a `scout`. Edits, Bash, git, and workflows are denied — the denial message tells you how
-to re-issue as a delegation.
+to re-issue as a delegation; ticket writes matched by `orchestrator_tools_allowed` are allowed on either posture.
 
 Spawning subagents: **always pin the `model` explicitly.** A subagent's model defaults to `inherit`, so an unpinned
-agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin a
-non-premium model for every role except `senior-developer`, which is pinned `fable` on purpose.
+agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin each
+role's configured model (the `models` block) on every spawn; by default every role is non-premium except the ones pinned
+`fable` on purpose — `senior-developer`, `architect`, and the code reviewer's first pass.
 
 ## When the session runs as the orchestrator
 
@@ -97,14 +104,14 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 5. Cap every return.
 6. Don't escalate a question a scout can answer.
 7. A heavy build or test run goes to `build-runner` (Sonnet 5): it builds the ref in its own worktree — one at a time,
-   lock-enforced — times the run against `.claude/build-timings.md`, and reports verdict, timing, and log path. Quick,
-   known-cheap checks any agent may run in-tree.
+   lock-enforced — times the run against the timing ledger (`paths.timings`), and reports verdict, timing, and log path.
+   Quick, known-cheap checks any agent may run in-tree.
 8. A failed build is diagnosed from its log: hand `build-analyst` (Haiku 4.5) the log path — do not re-run to re-see
    output, and never paste a log into premium context.
 9. A non-trivial diff gets a `code-reviewer` pass after the build is green and before the PR is marked ready — its Fable
-   pin covers the first pass per PR; follow-ups pass `model: "opus"` plus the previous findings. The reviewer persists
-   its findings under the reviews path (`paths.reviews`, default `.claude/reviews/`) itself and returns the verdict plus
-   the file path; the caller routes fixes.
+   pin covers the first pass per PR; follow-ups pass the executor tier's configured model (`opus` by default) plus the
+   previous findings. The reviewer persists its findings under the reviews path (`paths.reviews`, default
+   `.claude/reviews/`) itself and returns the verdict plus the file path; the caller routes fixes.
 10. Coordination artifacts — plan, tracker, addendum, decisions, reviews — are committed, pushed, and reconciled by
     `git-steward` (Sonnet 5), dispatched per invocation with a one-line instruction. A coordinator edits tracker rows
     and dictates addendum entries; it never runs git and never reads the addendum. The steward touches only artifact
