@@ -147,6 +147,12 @@ LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
 
 
+def same_content(a, b):
+    """True when two files have identical bytes; handles closed promptly rather than left to the collector."""
+    with open(a, "rb") as fa, open(b, "rb") as fb:
+        return fa.read() == fb.read()
+
+
 def load_json(path):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -304,7 +310,7 @@ def main():
             sys.exit("error: missing source file %s" % src_path)
         if not os.path.exists(dest_path):
             plan.append(("create", dest_path, src_path))
-        elif open(src_path, "rb").read() == open(dest_path, "rb").read():
+        elif same_content(src_path, dest_path):
             plan.append(("keep", dest_path, src_path))
             if os.path.exists(dest_path + ".new"):
                 migrations.append(("remove", dest_path + ".new", "repo copy matches shipped again"))

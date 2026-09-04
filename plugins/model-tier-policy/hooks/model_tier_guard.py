@@ -301,6 +301,26 @@ def cfg_list(cfg, key):
     return DEFAULTS[key]
 
 
+def cfg_int(cfg, key):
+    """A non-negative integer config value, or the shipped default when the config holds something else.
+
+    `int(cfg["read_budget"])` on a malformed value would raise into the fail-open wrapper and allow the call — the
+    read budget switched off for that call with nothing said, the same quiet failure the other config reads guard.
+    """
+    value = cfg.get(key)
+    if isinstance(value, bool):
+        return DEFAULTS[key]
+    if isinstance(value, int):
+        return value if value >= 0 else DEFAULTS[key]
+    if isinstance(value, str):
+        try:
+            parsed = int(value.strip())
+            return parsed if parsed >= 0 else DEFAULTS[key]
+        except ValueError:
+            pass
+    return DEFAULTS[key]
+
+
 def premium_model(cfg, model):
     """True when the session model matches the premium pattern — independent of posture (see the Agent gate)."""
     return isinstance(model, str) and bool(re.search(cfg_pattern(cfg), model, re.IGNORECASE))
@@ -685,7 +705,7 @@ def main():
             "posture via orchestrator_tools_allowed in the config." % (tool, role, delegate_hint)
         )
 
-    budget = int(cfg.get("read_budget") or 0)
+    budget = cfg_int(cfg, "read_budget")
     turn_key = payload.get("prompt_id")
     # No prompt_id means turns cannot be told apart, and a session-keyed counter would never reset — the budget would
     # lock reads out for the whole session after 8 calls. Fail open instead, like every other degraded input here.
