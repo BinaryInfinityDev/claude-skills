@@ -73,11 +73,12 @@ on the rare decision worth two premium opinions.
 **The code reviewer reads the diff after the build proves it.** The full flow is
 `plan → devils-advocate (optional) → executor / senior-developer → build-runner → code-reviewer → PR ready`, so a
 premium review is never spent on a diff that does not build. Its model is adjustable by convention: the agent pins Fable
-for the once-per-PR pass before marking ready, and follow-up re-reviews after fixes are spawned with `model: "opus"`
-plus the previous findings — the reviewer persists its findings under the reviews path (`paths.reviews`, default
-`.claude/reviews/`, writable for exactly this) and settles each prior finding, fixed or open, before hunting new ones.
-It never fixes; findings route back through the caller to `executor`, or `senior-developer` when a finding reveals
-entanglement. Trivial changes may skip it the way routine plans skip the devil's advocate.
+for the once-per-PR pass before marking ready, and follow-up re-reviews after fixes are spawned on the executor tier's
+configured model (`opus` by default) plus the previous findings — the reviewer persists its findings under the reviews
+path (`paths.reviews`, default `.claude/reviews/`, writable for exactly this) and settles each prior finding, fixed or
+open, before hunting new ones. It never fixes; findings route back through the caller to `executor`, or
+`senior-developer` when a finding reveals entanglement. Trivial changes may skip it the way routine plans skip the
+devil's advocate.
 
 **Specialists sit beside the roles, not among them.** Three ship with the policy, each kept deliberately narrow:
 
@@ -391,12 +392,13 @@ echo "=== $(date -Is) SessionStart in $PWD ==="
 # the cache directory is the cheap tell, and `claude plugin list` — read into a variable, never `| grep -q`, which
 # under pipefail can SIGPIPE the producer and report failure for an installed plugin — confirms it is enabled.
 # `claude plugin list` prints one `  > NAME@MARKETPLACE` line per plugin; the case pattern anchors on the whole id
-# behind a separator, so an unrelated `model-tier-policy-extras@…` or `x-model-tier-policy@…` cannot match.
+# between separators, so `model-tier-policy-extras@…`, `x-model-tier-policy@…`, and `…@claude-skills-fork` cannot match.
 CACHE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/claude-skills/model-tier-policy"
 if [ -d "$CACHE" ]; then
   listing=$(claude plugin list 2>/dev/null) || listing=""
   case "$listing" in
-    *[[:space:]\>]model-tier-policy@claude-skills*) echo "already installed"; exit 0 ;;
+    *[[:space:]\>]model-tier-policy@claude-skills | *[[:space:]\>]model-tier-policy@claude-skills[[:space:]]*)
+      echo "already installed"; exit 0 ;;
   esac
   echo "cache present but the plugin is not listed as enabled — reinstalling"
 fi
@@ -580,10 +582,13 @@ than a retry loop.
 | Everything else                                            | Allowed                                                                                                                                                       |
 
 **Orchestrator mode reuses this table.** When the session is marked as the orchestrator (`orchestrator_mode` /
-`MODEL_TIER_ORCHESTRATOR=on`) and the main loop is not premium, the same denials apply with one difference: `Agent`
-spawns are not gated at all, because inheritance lands on the worker tier the session already runs on while an explicit
-premium pin stays the same deliberate escalation it is for everyone else. Ticket tools (`orchestrator_tools_allowed`)
-are allowed on both postures — tickets are the plan's home whichever tier coordinates.
+`MODEL_TIER_ORCHESTRATOR=on`) and the main loop is not premium, the same denials apply, with the spawn gate split in
+two: the inheritance check follows the session's _model_, not its posture — a worker-tier orchestrator's unpinned spawns
+land on its own tier and pass, while an orchestrator configured to run on Fable gets the same inheritance denials a
+premium session does — and the pin-vs-config mismatch check runs on every denying posture, so a `models` override is
+enforced in the recommended topology too. An explicit premium pin stays the same deliberate escalation it is for
+everyone else. Ticket tools (`orchestrator_tools_allowed`) are allowed on both postures — tickets are the plan's home
+whichever tier coordinates.
 
 **The orchestrator's own model is enforced.** With `orchestrator_mode` on, the session's model is compared by tier
 (`haiku < sonnet < opus < fable`) to `models.orchestrator`. Equal or lower — a cheaper coordinator is fine — and the

@@ -5,8 +5,9 @@
 set -euo pipefail
 fail=0
 while IFS= read -r file; do
-  # Markdown link targets that are relative paths: ./x, ../x, or dir/x — a URL has a scheme (`https:`) before any `/`.
-  if grep -nE '\]\((\./|\.\./|[A-Za-z0-9_.-]+/)[^)]*\)' "$file" >&2; then
+  # Any link target with no scheme and no leading `#` is a relative path — `./x`, `../x`, `dir/x`, and the bare
+  # sibling filename an author writes naturally (`[x](state-discipline.md)`). URLs carry a `:`; anchors start with `#`.
+  if grep -nE '\]\([^):#][^):]*\)' "$file" >&2; then
     echo "error: $file contains a relative link — shipped rules must refer to other files by name in prose" >&2
     fail=1
   fi

@@ -306,6 +306,8 @@ def main():
             plan.append(("create", dest_path, src_path))
         elif open(src_path, "rb").read() == open(dest_path, "rb").read():
             plan.append(("keep", dest_path, src_path))
+            if os.path.exists(dest_path + ".new"):
+                migrations.append(("remove", dest_path + ".new", "repo copy matches shipped again"))
         else:
             plan.append(("drift", dest_path, src_path))
 
@@ -455,6 +457,11 @@ def main():
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         role = os.path.splitext(os.path.basename(dest_path))[0]
         configured = models_cfg.get(role) if os.path.basename(os.path.dirname(dest_path)) == "agents" else None
+        # A configured value goes into YAML frontmatter verbatim, so it must be a plain token — anything else would
+        # break the definition's frontmatter silently (Claude Code drops all fields on a parse error).
+        if configured and not re.match(r"^[A-Za-z0-9._-]+$", configured):
+            print("warning: models.%s = %r is not a plain model id; the shipped pin is kept" % (role, configured))
+            configured = None
         if configured:
             with open(src_path, encoding="utf-8") as fh:
                 text = fh.read()

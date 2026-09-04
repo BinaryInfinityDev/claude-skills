@@ -73,13 +73,13 @@ Eight roles, each pinned to a model (the shipped defaults — a repo overrides t
 `orchestrator` (Opus 5) holds the session's main loop in the recommended topology and coordinates — tickets, plans,
 dispatch, never implementation; `architect` (Fable 5) frames and decides; `senior-developer` (Fable 5) implements the
 rare change too entangled to hand off as a plan; `executor` (Opus 5) implements; `code-reviewer` (Fable 5 for the first
-pass per PR, Opus 5 for follow-ups) reads the proven diff adversarially before the PR is marked ready and persists its
-findings file; `scout` (Opus 5, read-only) investigates and returns findings instead of file contents; `devils-advocate`
-(Opus 5, read-only) optionally stress-tests a plan before anyone builds it; and `runner` (Sonnet 5) handles bulk
-mechanical work. Three specialists sit beside them: `build-runner` (Sonnet 5) proves a ref in an isolated git worktree —
-one build at a time, lock-enforced, timed against a ledger — `build-analyst` (Haiku 4.5) triages failed-build logs from
-a path instead of re-running the build, and `git-steward` (Sonnet 5) commits and reconciles a coordinator's
-plan/tracker/addendum artifacts and keeps branches tidy, never touching feature work.
+pass per PR, the executor tier for follow-ups) reads the proven diff adversarially before the PR is marked ready and
+persists its findings file; `scout` (Opus 5, read-only) investigates and returns findings instead of file contents;
+`devils-advocate` (Opus 5, read-only) optionally stress-tests a plan before anyone builds it; and `runner` (Sonnet 5)
+handles bulk mechanical work. Three specialists sit beside them: `build-runner` (Sonnet 5) proves a ref in an isolated
+git worktree — one build at a time, lock-enforced, timed against a ledger — `build-analyst` (Haiku 4.5) triages
+failed-build logs from a path instead of re-running the build, and `git-steward` (Sonnet 5) commits and reconciles a
+coordinator's plan/tracker/addendum artifacts and keeps branches tidy, never touching feature work.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:

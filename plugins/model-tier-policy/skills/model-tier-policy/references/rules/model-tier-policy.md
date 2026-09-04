@@ -109,9 +109,9 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 8. A failed build is diagnosed from its log: hand `build-analyst` (Haiku 4.5) the log path — do not re-run to re-see
    output, and never paste a log into premium context.
 9. A non-trivial diff gets a `code-reviewer` pass after the build is green and before the PR is marked ready — its Fable
-   pin covers the first pass per PR; follow-ups pass `model: "opus"` plus the previous findings. The reviewer persists
-   its findings under the reviews path (`paths.reviews`, default `.claude/reviews/`) itself and returns the verdict plus
-   the file path; the caller routes fixes.
+   pin covers the first pass per PR; follow-ups pass the executor tier's configured model (`opus` by default) plus the
+   previous findings. The reviewer persists its findings under the reviews path (`paths.reviews`, default
+   `.claude/reviews/`) itself and returns the verdict plus the file path; the caller routes fixes.
 10. Coordination artifacts — plan, tracker, addendum, decisions, reviews — are committed, pushed, and reconciled by
     `git-steward` (Sonnet 5), dispatched per invocation with a one-line instruction. A coordinator edits tracker rows
     and dictates addendum entries; it never runs git and never reads the addendum. The steward touches only artifact
