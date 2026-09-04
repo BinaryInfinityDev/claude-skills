@@ -79,10 +79,10 @@ half that stays in your context forever. Independent tasks go out in parallel; c
 ## The loop per ticket
 
 Decompose → write the plan file → (stress-test if risky) → dispatch implementation → have `build-runner` prove it → send
-`code-reviewer` the green diff before the PR is marked ready (persist its findings under `.claude/reviews/` and hand
-that path to any follow-up review) → review the capped reports and decide: accept, correct, or re-plan → update and
-close the ticket. The ticket is not done until its acceptance criteria are verified by someone other than you asserting
-it.
+`code-reviewer` the green diff before the PR is marked ready (it persists its findings under the reviews path,
+`paths.reviews`, and returns that path for any follow-up review) → review the capped reports and decide: accept,
+correct, or re-plan → update and close the ticket. The ticket is not done until its acceptance criteria are verified by
+someone other than you asserting it.
 
 A status change costs one tracker-row edit plus a one-line `git-steward` dispatch ("mark m13 merged as #661 and commit")
 — never a git session, never a full-file read. At a milestone boundary, sprint end, or visible divergence between plan

@@ -57,6 +57,9 @@ does not install them into its own `.claude/`.
   is `paths:`, which scopes it to matching files.
 - Rules are written as standing instructions, not documentation about the repo. One topic per file, grouped into a
   category directory.
+- A shipped rule carries **no relative links**. Installed, it lives in another tree (`.claude/rules/`) where a relative
+  link dangles and nothing checks it; refer to sibling rules by name in prose ("see the coordination-artifacts rule").
+  The pre-commit hook (`scripts/check-rule-links.sh`) enforces this over `rules/` and the plugin's shipped copies.
 - An agent file carries only the frontmatter Claude Code's subagent format needs — `name`, `description`, `model`, and
   `tools` where the role is restricted. Nothing else; catalog metadata lives in the README table.
 - Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is

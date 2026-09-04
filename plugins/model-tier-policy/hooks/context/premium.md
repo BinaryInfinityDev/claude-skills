@@ -14,5 +14,5 @@ and talk to the user.
   line rather than leaving artifacts uncommitted.
 - Always pin a subagent's model. Unpinned agents inherit the premium tier.
 - Your orientation budget is {budget} reads this turn; past that, send a scout. Premium context is the scarce resource:
-  spend it on decisions, never on data. Edits, shell, and workflows are denied by hook — the denial tells you how to
-  re-issue as a delegation.
+  spend it on decisions, never on data. Edits, shell, and workflows are denied by hook (ticket writes are allowed) — the
+  denial tells you how to re-issue as a delegation.

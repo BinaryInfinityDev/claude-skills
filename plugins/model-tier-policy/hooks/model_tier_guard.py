@@ -27,7 +27,8 @@ DEFAULTS = {
     "read_budget": 8,
     "reminder_interval": 10,  # consumed by model_tier_context.py, which shares this loader
     "orchestrator_mode": False,
-    # Tools the orchestrator may use even though they mutate external state: tickets are its work product.
+    # Tools a coordinating session may use even though they mutate external state — on the premium posture as much
+    # as the orchestrator one, because tickets are the plan's home on either. The key's name predates that.
     "orchestrator_tools_allowed": [r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"],
     # Where the policy's file conventions live in THIS repo. Every rule, role, and reminder that names one of these
     # paths defers to this block, so a repo that keeps plans in docs/plans/ declares it once here instead of bending
@@ -68,6 +69,11 @@ DEFAULTS = {
         r"|unresolve|run_|actions_run|issue_write|pull_request_review_write)",
     ],
 }
+
+# Path keys that accept null as an explicit opt-out. runner_lock: null means the repo's bar command owns locking and
+# the build runner neither takes nor checks a lock. The other keys are interpolated into the reminder text and named
+# by the rules, so a null there is nonsense and keeps the default.
+NULLABLE_PATHS = {"runner_lock"}
 
 # The namespace Claude Code registers this policy's agents under when they are served by the plugin rather than by
 # `.claude/agents/` copies. Only a plugin-served agent needs it; see agent_ref.
@@ -197,6 +203,8 @@ def resolved_paths(cfg):
         for key, value in user.items():
             if isinstance(value, str) and value:
                 paths[key] = value
+            elif value is None and key in NULLABLE_PATHS:
+                paths[key] = None
     return paths
 
 
@@ -481,8 +489,8 @@ def main():
                 deny(reason)
         allow()
 
-    if as_orchestrator and matches_any(cfg["orchestrator_tools_allowed"], tool):
-        allow()  # tickets are the orchestrator's work product, not procedural drift
+    if matches_any(cfg["orchestrator_tools_allowed"], tool):
+        allow()  # tickets are the plan's home on either posture — coordination's work product, not procedural drift
 
     if matches_any(cfg["procedural_tools_denied"], tool):
         if tool in WRITE_TOOLS:
@@ -534,13 +542,9 @@ def main():
                 "model=\"opus\", prompt=<the goal and plan file path>)." % refs["executor_agent"]
             )
 
-        extra = (
-            ""
-            if is_premium
-            else "\nTicket tools the orchestrator owns are allowed via orchestrator_tools_allowed in the config."
-        )
         deny(
-            "Model tier policy: %s mutates external state and you are %s.\n%s%s" % (tool, role, delegate_hint, extra)
+            "Model tier policy: %s mutates external state and you are %s.\n%s\nTicket tools are allowed on either "
+            "posture via orchestrator_tools_allowed in the config." % (tool, role, delegate_hint)
         )
 
     budget = int(cfg.get("read_budget") or 0)

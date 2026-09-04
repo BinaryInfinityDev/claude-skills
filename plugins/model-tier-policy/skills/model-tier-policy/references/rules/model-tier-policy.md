@@ -47,7 +47,7 @@ with a tighter cap instead.
 
 You may write plan, decision, and review files, and spend a small orientation budget of reads (8 per turn,
 hook-enforced). Past that, send a `scout`. Edits, Bash, git, and workflows are denied — the denial message tells you how
-to re-issue as a delegation.
+to re-issue as a delegation; ticket writes matched by `orchestrator_tools_allowed` are allowed on either posture.
 
 Spawning subagents: **always pin the `model` explicitly.** A subagent's model defaults to `inherit`, so an unpinned
 agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin a
@@ -97,8 +97,8 @@ merely tedious. "Tricky" is not "tedious": a large mechanical change is a `runne
 5. Cap every return.
 6. Don't escalate a question a scout can answer.
 7. A heavy build or test run goes to `build-runner` (Sonnet 5): it builds the ref in its own worktree — one at a time,
-   lock-enforced — times the run against `.claude/build-timings.md`, and reports verdict, timing, and log path. Quick,
-   known-cheap checks any agent may run in-tree.
+   lock-enforced — times the run against the timing ledger (`paths.timings`), and reports verdict, timing, and log path.
+   Quick, known-cheap checks any agent may run in-tree.
 8. A failed build is diagnosed from its log: hand `build-analyst` (Haiku 4.5) the log path — do not re-run to re-see
    output, and never paste a log into premium context.
 9. A non-trivial diff gets a `code-reviewer` pass after the build is green and before the PR is marked ready — its Fable
