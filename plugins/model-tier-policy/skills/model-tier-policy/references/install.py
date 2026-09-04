@@ -19,6 +19,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -60,6 +61,7 @@ HOOK_FILES = [
     ("context/orchestrator-brief.md", "hooks/context/orchestrator-brief.md"),
     ("context/worker.md", "hooks/context/worker.md"),
     ("context/worker-brief.md", "hooks/context/worker-brief.md"),
+    ("context/disabled.md", "hooks/context/disabled.md"),
 ]
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [
@@ -376,6 +378,14 @@ def main():
         user_paths = load_json(existing_cfg_path).get("paths")
         if isinstance(user_paths, dict):
             paths_cfg.update({k: v for k, v in user_paths.items() if isinstance(v, str) and v})
+    # Hand-installed agent copies get the configured model baked into their frontmatter pin: a local copy shadows
+    # the plugin's, so this is the one place a repo's override reaches an agent that is spawned without a model.
+    models_cfg = dict(shipped_cfg.get("models") or {})
+    if existing_cfg_path is not None and not args.force:
+        user_models = load_json(existing_cfg_path).get("models")
+        if isinstance(user_models, dict):
+            models_cfg.update({k: v for k, v in user_models.items() if isinstance(v, str) and v})
+
     op_rules_src = os.path.join(HERE, OPERATING_RULES_TEMPLATE)
     op_rules_dest = os.path.join(root, paths_cfg.get("operating_rules") or ".claude/agent-operating-rules.md")
     op_rules_create = os.path.exists(op_rules_src) and not os.path.exists(op_rules_dest)
@@ -443,7 +453,16 @@ def main():
             shutil.copyfile(src_path, dest_path + ".new")
             continue
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        shutil.copyfile(src_path, dest_path)
+        role = os.path.splitext(os.path.basename(dest_path))[0]
+        configured = models_cfg.get(role) if os.path.basename(os.path.dirname(dest_path)) == "agents" else None
+        if configured:
+            with open(src_path, encoding="utf-8") as fh:
+                text = fh.read()
+            text, swapped = re.subn(r"^(model:\s*).*$", r"\g<1>%s" % configured, text, count=1, flags=re.MULTILINE)
+            with open(dest_path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+        else:
+            shutil.copyfile(src_path, dest_path)
         if dest_path.endswith(".py"):
             os.chmod(dest_path, 0o755)
 

@@ -19,6 +19,12 @@ Spell a role's `subagent_type` the way this install resolves it: bare (`executor
 `.claude/agents/`, namespaced (`model-tier-policy:executor`) when the roles come from the plugin — a plugin-served agent
 does not answer to the bare name. The hook denials and reminders print the id that resolves here; copy it verbatim.
 
+The models in the table are the shipped defaults. A repo overrides them per role in the `models` block of
+`.claude/model-tier-policy.json`; the reminders and denials print each role with its configured model, and every spawn
+passes that model explicitly — a plugin-served agent's own pin is only the fallback, and the guard refuses an unpinned
+spawn whose pin disagrees with the config. The orchestrator's model is enforced against the session: a session opened
+above it disables the policy for that session, with a notice every turn.
+
 The **senior developer** is the one premium-tier role that writes code — for work that cannot be reduced to a plan an
 executor could carry out. It may change the approach but not the goal, and it delegates its own reading to `scout` and
 its own mechanical sweeps to `runner`/`executor`. If a plan can be written, write the plan and send an executor.
@@ -50,8 +56,9 @@ hook-enforced). Past that, send a `scout`. Edits, Bash, git, and workflows are d
 to re-issue as a delegation; ticket writes matched by `orchestrator_tools_allowed` are allowed on either posture.
 
 Spawning subagents: **always pin the `model` explicitly.** A subagent's model defaults to `inherit`, so an unpinned
-agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin a
-non-premium model for every role except `senior-developer`, which is pinned `fable` on purpose.
+agent spawned from a Fable session runs _on Fable_ — which is the whole cost this policy exists to avoid. Pin each
+role's configured model (the `models` block) on every spawn; by default every role is non-premium except the ones pinned
+`fable` on purpose — `senior-developer`, `architect`, and the code reviewer's first pass.
 
 ## When the session runs as the orchestrator
 
