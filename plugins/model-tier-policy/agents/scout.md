@@ -1,8 +1,11 @@
 ---
 name: scout
-description:
+description: >-
   Read-only investigation — how something works, where it lives, why it breaks, what the blast radius is. Use instead of
-  reading files directly from the premium tier. Returns distilled findings, never file contents.
+  reading files directly from the premium tier. Returns distilled findings, never file contents. Boundary: no edit tools
+  and no GitHub writes — the GitHub tools are the read set (issues, PRs, commits, code search); Bash is read-only
+  inspection (git log, rg, a test run that only observes), never a mutation and not `gh`. Anything to change goes to
+  executor.
 tools:
   Read, Grep, Glob, WebFetch, WebSearch, Bash, mcp__github__issue_read, mcp__github__list_issues,
   mcp__github__search_issues, mcp__github__pull_request_read, mcp__github__list_pull_requests,

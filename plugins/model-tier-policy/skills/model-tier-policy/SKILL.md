@@ -36,7 +36,7 @@ agent's own pin.
 | Role                       | Agent              | Model                               | Owns                                                                                                                          |
 | -------------------------- | ------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Orchestrator** (coord.)  | `orchestrator`     | Opus 5 (`claude-opus-5`)            | Tickets, plans, decomposition, dispatch, tracking, status — never implementation                                              |
-| **Architect** (premium)    | `architect`        | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition, acceptance criteria, final review                              |
+| **Architect** (premium)    | `architect`        | Fable 5 (`claude-fable-5`)          | Problem framing, trade-offs, architecture, task decomposition from tickets it reads itself, acceptance criteria, final review |
 | **Senior developer**       | `senior-developer` | Fable 5 (`claude-fable-5`)          | Tricky or novel implementation where design and code must be found together                                                   |
 | **Executor** (default)     | `executor`         | Opus 5 (`claude-opus-5`)            | All implementation: edits, refactors, tests, builds, git, debugging                                                           |
 | **Code reviewer** (gate)   | `code-reviewer`    | Fable 5 first pass, Opus follow-ups | Adversarial read of the green diff before the PR is marked ready: verdict plus ranked findings; writes only its findings file |
@@ -52,6 +52,13 @@ splits across three files matched to their access patterns — plan (read rarely
 place), append-only addendum (dictated, never read) — with `git-steward` doing the committing and the architect
 consolidating the detail back into the plan on a watermark; the shipped `coordination-artifacts` and `state-discipline`
 rules carry that discipline.
+
+**Every restricted role states its boundary in its description.** A coordinator picks a role from its description —
+`/agents`, the plugin listing — and never reads the body, so each role whose tool list is narrower than its description
+implies ends the description with a `Boundary:` clause: what the tools exclude, which role covers it, and — where the
+role carries `Bash` — that the shell is not `gh`. Read the clause before briefing: a brief that needs what the clause
+excludes is two briefs, and a role that cannot reach GitHub gets the ticket quoted, not cited. The unrestricted roles
+(`executor`, `senior-developer`, `runner`, `build-runner`) carry no clause because they have no gap.
 
 **Opus is the default worker.** Reach for Sonnet only when the task is genuinely mechanical and voluminous enough that
 the tier difference matters. When unsure between Opus and Sonnet, pick Opus.
@@ -98,7 +105,8 @@ devil's advocate.
 - `git-steward` (Sonnet 5) is the coordinator's git custodian, spawned per invocation and never kept resident. It
   commits and pushes coordination artifacts (plan, tracker, addendum, decisions, reviews, operating rules), takes
   dictated updates ("mark m13 merged as #661" costs the coordinator ten words), reconciles tracker rows against their
-  issue/PR handles, and keeps branches and worktrees tidy. It never touches feature work: artifact paths only, and
+  issue/PR handles, opens or refreshes the PR for a branch it pushed and answers and resolves its review threads from
+  dictated replies, and keeps branches and worktrees tidy. It never touches feature work: artifact paths only, and
   anything else dirty in the tree is reported, never committed or stashed — the push gate stays intact because the
   steward is structurally outside it.
 
@@ -487,31 +495,31 @@ policy.
 
 The installer is idempotent and reports what it changed. It writes:
 
-| File                                                   | Role                                                                                                        |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `.claude/rules/model-tier-policy.md`                   | Always-loaded rules — in context every session, survives compaction                                         |
-| `.claude/rules/build-discipline/worktree-builds.md`    | Seeded, then yours — builds in worktrees beside development, pushes gated on green                          |
-| `.claude/rules/coordination/coordination-artifacts.md` | Seeded, then yours — plan/tracker/addendum discipline, the steward, consolidation                           |
-| `.claude/rules/coordination/state-discipline.md`       | Seeded, then yours — verify repo state before asserting it; no-op silence; subscribe deliberately           |
-| `.claude/rules/coordination/multi-agent-hygiene.md`    | Seeded, then yours — branch namespacing, fetch-before-create, per-agent scratch paths                       |
-| `.claude/agent-operating-rules.md`                     | Seed template, created only when absent (at `paths.operating_rules`) — yours to fill in                     |
-| `.claude/agents/executor.md`                           | Opus, full tools — the default worker                                                                       |
-| `.claude/agents/orchestrator.md`                       | Opus, coordination tools only — tickets, plans, dispatch; never implementation                              |
-| `.claude/agents/runner.md`                             | Sonnet, full tools — bulk mechanical work                                                                   |
-| `.claude/agents/scout.md`                              | Opus, read-only — investigation that returns findings, not dumps                                            |
-| `.claude/agents/architect.md`                          | Fable — decisions and consolidation; writes coordination artifacts only, code read-only                     |
-| `.claude/agents/senior-developer.md`                   | Fable, writes code — for novel or tightly coupled implementation                                            |
-| `.claude/agents/build-analyst.md`                      | Haiku, read-only — failed-build log triage from a path                                                      |
-| `.claude/agents/build-runner.md`                       | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged                              |
-| `.claude/agents/code-reviewer.md`                      | Fable first pass / Opus follow-ups — adversarial review; writes only its findings file                      |
-| `.claude/agents/devils-advocate.md`                    | Opus, read-only — optional adversarial review of a plan before it is built                                  |
-| `.claude/agents/git-steward.md`                        | Sonnet — commits/reconciles coordination artifacts, branch hygiene; never feature work                      |
-| `.claude/hooks/model_tier_guard.py`                    | `PreToolUse` — hard-denies procedural tool calls on the premium tier                                        |
-| `.claude/hooks/model_tier_context.py`                  | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically                        |
-| `.claude/hooks/context/*.md`                           | The seven reminder fragments the context hook loads (per posture, full and brief, plus the disabled notice) |
-| `.claude/model-tier-policy.json`                       | Config (see below)                                                                                          |
-| `.claude/model-tier-policy.version`                    | Provenance stamp: plugin version and source of this install, for drift detection                            |
-| `.claude/settings.json`                                | Hook wiring, merged into whatever is already there                                                          |
+| File                                                   | Role                                                                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `.claude/rules/model-tier-policy.md`                   | Always-loaded rules — in context every session, survives compaction                                                                |
+| `.claude/rules/build-discipline/worktree-builds.md`    | Seeded, then yours — builds in worktrees beside development, pushes gated on green                                                 |
+| `.claude/rules/coordination/coordination-artifacts.md` | Seeded, then yours — plan/tracker/addendum discipline, the steward, consolidation                                                  |
+| `.claude/rules/coordination/state-discipline.md`       | Seeded, then yours — verify repo state before asserting it; no-op silence; no-ops by construction; subscribe deliberately          |
+| `.claude/rules/coordination/multi-agent-hygiene.md`    | Seeded, then yours — branch namespacing, fetch-before-create, per-agent scratch paths                                              |
+| `.claude/agent-operating-rules.md`                     | Seed template, created only when absent (at `paths.operating_rules`) — yours to fill in                                            |
+| `.claude/agents/executor.md`                           | Opus, full tools — the default worker                                                                                              |
+| `.claude/agents/orchestrator.md`                       | Opus, coordination tools only — tickets, plans, dispatch; never implementation                                                     |
+| `.claude/agents/runner.md`                             | Sonnet, full tools — bulk mechanical work                                                                                          |
+| `.claude/agents/scout.md`                              | Opus, read-only — investigation that returns findings, not dumps                                                                   |
+| `.claude/agents/architect.md`                          | Fable — decisions and consolidation; reads tickets through the GitHub read set; writes coordination artifacts only, code read-only |
+| `.claude/agents/senior-developer.md`                   | Fable, writes code — for novel or tightly coupled implementation                                                                   |
+| `.claude/agents/build-analyst.md`                      | Haiku, read-only — failed-build log triage from a path                                                                             |
+| `.claude/agents/build-runner.md`                       | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged                                                     |
+| `.claude/agents/code-reviewer.md`                      | Fable first pass / Opus follow-ups — adversarial review; writes only its findings file                                             |
+| `.claude/agents/devils-advocate.md`                    | Opus, read-only — optional adversarial review of a plan before it is built                                                         |
+| `.claude/agents/git-steward.md`                        | Sonnet — commits/reconciles coordination artifacts, PR and review-thread disposition, branch hygiene; never feature work           |
+| `.claude/hooks/model_tier_guard.py`                    | `PreToolUse` — hard-denies procedural tool calls on the premium tier                                                               |
+| `.claude/hooks/model_tier_context.py`                  | `UserPromptSubmit`/`SessionStart`/`PostCompact` — re-injects the policy periodically                                               |
+| `.claude/hooks/context/*.md`                           | The seven reminder fragments the context hook loads (per posture, full and brief, plus the disabled notice)                        |
+| `.claude/model-tier-policy.json`                       | Config (see below)                                                                                                                 |
+| `.claude/model-tier-policy.version`                    | Provenance stamp: plugin version and source of this install, for drift detection                                                   |
+| `.claude/settings.json`                                | Hook wiring, merged into whatever is already there                                                                                 |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
 `references/settings-snippet.json` into `.claude/settings.json`.

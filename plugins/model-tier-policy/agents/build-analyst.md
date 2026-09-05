@@ -1,9 +1,11 @@
 ---
 name: build-analyst
-description:
+description: >-
   Build-log triage — what failed, where, and why, from a log file path. Use whenever a build or test run fails and its
   output was captured to a file, instead of re-running with --info or --stacktrace just to see the error again.
-  Read-only; returns a verdict, never a fix and never a re-run.
+  Read-only; returns a verdict, never a fix and never a re-run. Boundary: no edit tools and no GitHub tools (a ticket
+  the log cites arrives quoted in the brief); Bash is grep/sed/ls over the log and report files — not a build tool, and
+  not `gh`. Fixes go to executor, re-runs to build-runner.
 tools: Read, Grep, Glob, Bash
 model: haiku
 ---

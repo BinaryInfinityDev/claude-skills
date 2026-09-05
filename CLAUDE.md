@@ -62,6 +62,14 @@ does not install them into its own `.claude/`.
   The pre-commit hook (`scripts/check-rule-links.sh`) enforces this over `rules/` and the plugin's shipped copies.
 - An agent file carries only the frontmatter Claude Code's subagent format needs — `name`, `description`, `model`, and
   `tools` where the role is restricted. Nothing else; catalog metadata lives in the README table.
+- A restricted agent states its boundary in its `description`. A coordinator picks a role from its description
+  (`/agents`, the plugin listing) and never reads the body, so a boundary stated only in the body is still discovered by
+  dispatching into the role. Every agent that declares `tools:` ends its description with a `Boundary:` clause — what
+  the tools exclude and which role covers it — and a restricted role that carries `Bash` says that Bash is not `gh`.
+  Write such a description as a `>-` folded scalar: YAML reads `: ` inside a plain scalar as a nested mapping, or
+  rejects it, and either way the description is gone. The pre-commit hook (`scripts/check-agent-boundaries.sh`) enforces
+  both clauses, and the two plain-scalar traps (`: ` and ` #`), over every `.md` in a plugin's `agents/` directory —
+  which therefore holds agent files only.
 - Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is
   the signal installed copies use to know an update exists, and `claude plugin update` reports "already at the latest
   version" over a stale cache when it is skipped. The pre-commit hook (`scripts/check-plugin-versions.sh`) blocks a
@@ -91,8 +99,10 @@ does not install them into its own `.claude/`.
    verbatim, flat in the plugin's `agents/` directory.
 2. Always pin `model:`. An unpinned subagent inherits its caller's model, which is the cost the `model-tier-policy`
    skill exists to prevent.
-3. Add it to the agent catalog in the README, and bump the plugin's `version`.
-4. If a skill installs it by hand too, add it to that skill's installer — `model-tier-policy` sources its agents from
+3. If it declares `tools:`, end its `description` with a `Boundary:` clause (see Conventions) — the pre-commit check
+   refuses a restricted agent without one.
+4. Add it to the agent catalog in the README, and bump the plugin's `version`.
+5. If a skill installs it by hand too, add it to that skill's installer — `model-tier-policy` sources its agents from
    `plugins/model-tier-policy/agents/`, so a new role there needs a line in
    `plugins/model-tier-policy/skills/model-tier-policy/references/install.py`.
 
