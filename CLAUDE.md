@@ -66,9 +66,9 @@ does not install them into its own `.claude/`.
   (`/agents`, the plugin listing) and never reads the body, so a boundary stated only in the body is still discovered by
   dispatching into the role. Every agent that declares `tools:` ends its description with a `Boundary:` clause — what
   the tools exclude and which role covers it — and a restricted role that carries `Bash` says that Bash is not `gh`.
-  Write such a description as a `>-` folded scalar: `: ` is illegal inside a plain multi-line scalar and fails the
-  frontmatter parse. The pre-commit hook (`scripts/check-agent-boundaries.sh`) enforces both clauses over every plugin's
-  agents.
+  Write such a description as a `>-` folded scalar: YAML reads `: ` inside a plain scalar as a nested mapping, or
+  rejects it, and either way the description is gone. The pre-commit hook (`scripts/check-agent-boundaries.sh`) enforces
+  both clauses, and the scalar style, over every plugin's agents.
 - Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is
   the signal installed copies use to know an update exists, and `claude plugin update` reports "already at the latest
   version" over a stale cache when it is skipped. The pre-commit hook (`scripts/check-plugin-versions.sh`) blocks a
