@@ -109,25 +109,29 @@ session quietly runs the whole subtask on the premium tier.
 
 Agents live flat inside their plugin: `plugins/{plugin-name}/agents/{agent-name}.md`.
 
+Every agent whose tool list is narrower than its description implies ends that description with a `Boundary:` clause —
+what the tools exclude and which role covers it — so the gap is read from the listing instead of discovered by
+dispatching into the role. A pre-commit check keeps it that way.
+
 ### Model Tier Policy
 
 The roles of the [model-tier-policy](plugins/model-tier-policy/skills/model-tier-policy/SKILL.md) skill, plus the
 specialists that ship alongside them. Its installer writes these into a target repo for you; copy them by hand only if
 you want the roles without the enforcement.
 
-| Agent                                                                    | Model     | Description                                                                        |
-| ------------------------------------------------------------------------ | --------- | ---------------------------------------------------------------------------------- |
-| [orchestrator](plugins/model-tier-policy/agents/orchestrator.md)         | Opus 5    | Coordinates the team from the main loop — tickets, plans, dispatch; never works    |
-| [architect](plugins/model-tier-policy/agents/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — returns a decision, not code                  |
-| [senior-developer](plugins/model-tier-policy/agents/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                        |
-| [executor](plugins/model-tier-policy/agents/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                |
-| [code-reviewer](plugins/model-tier-policy/agents/code-reviewer.md)       | Fable 5   | Adversarial read of the proven diff before the PR is ready; Opus 5 for follow-ups  |
-| [scout](plugins/model-tier-policy/agents/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                |
-| [devils-advocate](plugins/model-tier-policy/agents/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict               |
-| [runner](plugins/model-tier-policy/agents/runner.md)                     | Sonnet 5  | Bulk mechanical work — heavy builds go to build-runner                             |
-| [build-runner](plugins/model-tier-policy/agents/build-runner.md)         | Sonnet 5  | Heavy builds in an isolated worktree — one at a time, timed, cleaned up            |
-| [build-analyst](plugins/model-tier-policy/agents/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run |
-| [git-steward](plugins/model-tier-policy/agents/git-steward.md)           | Sonnet 5  | Commits/reconciles coordination artifacts, branch hygiene — never feature work     |
+| Agent                                                                    | Model     | Description                                                                                                      |
+| ------------------------------------------------------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------- |
+| [orchestrator](plugins/model-tier-policy/agents/orchestrator.md)         | Opus 5    | Coordinates the team from the main loop — tickets, plans, dispatch; never works                                  |
+| [architect](plugins/model-tier-policy/agents/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — reads the tickets it cites; returns a decision, not code                    |
+| [senior-developer](plugins/model-tier-policy/agents/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                                                      |
+| [executor](plugins/model-tier-policy/agents/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                                              |
+| [code-reviewer](plugins/model-tier-policy/agents/code-reviewer.md)       | Fable 5   | Adversarial read of the proven diff before the PR is ready; Opus 5 for follow-ups                                |
+| [scout](plugins/model-tier-policy/agents/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                                              |
+| [devils-advocate](plugins/model-tier-policy/agents/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict                                             |
+| [runner](plugins/model-tier-policy/agents/runner.md)                     | Sonnet 5  | Bulk mechanical work — heavy builds go to build-runner                                                           |
+| [build-runner](plugins/model-tier-policy/agents/build-runner.md)         | Sonnet 5  | Heavy builds in an isolated worktree — one at a time, timed, cleaned up                                          |
+| [build-analyst](plugins/model-tier-policy/agents/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run                               |
+| [git-steward](plugins/model-tier-policy/agents/git-steward.md)           | Sonnet 5  | Commits/reconciles coordination artifacts, PR and review-thread disposition, branch hygiene — never feature work |
 
 ## Installing an agent
 
@@ -161,11 +165,11 @@ Rules are grouped by category: `rules/{category}/{rule-name}.md`.
 
 ### Coordination
 
-| Rule                                                                   | Description                                                                                          |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [coordination-artifacts](rules/coordination/coordination-artifacts.md) | Plan / tracker / append-only addendum, each matched to its access pattern; steward and consolidation |
-| [state-discipline](rules/coordination/state-discipline.md)             | Verify repo state before asserting it; report changes, never observations; subscribe deliberately    |
-| [multi-agent-hygiene](rules/coordination/multi-agent-hygiene.md)       | Namespaced agent branches, fetch-before-create, never touch another agent's branch or scratch files  |
+| Rule                                                                   | Description                                                                                                                    |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [coordination-artifacts](rules/coordination/coordination-artifacts.md) | Plan / tracker / append-only addendum, each matched to its access pattern; steward and consolidation                           |
+| [state-discipline](rules/coordination/state-discipline.md)             | Verify repo state before asserting it; report changes, never observations; drop no-ops by construction; subscribe deliberately |
+| [multi-agent-hygiene](rules/coordination/multi-agent-hygiene.md)       | Namespaced agent branches, fetch-before-create, never touch another agent's branch or scratch files                            |
 
 The model-tier-policy installer installs this one automatically alongside the `build-runner` agent, since the agent's
 worktree and lock mechanics assume its session-side conventions; other repos can install it by hand as below.
