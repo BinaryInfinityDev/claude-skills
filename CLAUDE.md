@@ -68,7 +68,8 @@ does not install them into its own `.claude/`.
   the tools exclude and which role covers it — and a restricted role that carries `Bash` says that Bash is not `gh`.
   Write such a description as a `>-` folded scalar: YAML reads `: ` inside a plain scalar as a nested mapping, or
   rejects it, and either way the description is gone. The pre-commit hook (`scripts/check-agent-boundaries.sh`) enforces
-  both clauses, and the scalar style, over every plugin's agents.
+  both clauses, and the two plain-scalar traps (`: ` and ` #`), over every `.md` in a plugin's `agents/` directory —
+  which therefore holds agent files only.
 - Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is
   the signal installed copies use to know an update exists, and `claude plugin update` reports "already at the latest
   version" over a stale cache when it is skipped. The pre-commit hook (`scripts/check-plugin-versions.sh`) blocks a
