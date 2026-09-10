@@ -10,6 +10,11 @@ accumulates — in a premium-tier session it spends exactly the budget it exists
 turn 1 and every `reminder_interval` turns after (default 10), and a one-line marker carries the turns in between.
 SessionStart and PostCompact always re-anchor with the full text.
 
+The model is read from the transcript, and a fresh session has no assistant entry in it at SessionStart or on its first
+prompt. Exiting silently there left the first turn — the whole of an autonomous single-turn session — with no reminder
+at all, so an unknown model now renders the posture-neutral `pending` fragment instead. It does not count as a turn: the
+first firing that knows the model is turn 1 and lands the full text.
+
 The injected text itself lives in context/*.md beside this script (see render below); this file is only the loader.
 """
 
@@ -23,7 +28,16 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import agent_ref, load_config, live_model, posture, project_dir, resolved_models, resolved_paths
+    from model_tier_guard import (
+        agent_ref,
+        load_config,
+        live_model,
+        orchestrator_active,
+        posture,
+        project_dir,
+        resolved_models,
+        resolved_paths,
+    )
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -114,8 +128,6 @@ def main():
     model = payload.get("model") or live_model(payload.get("transcript_path")) or ""
     if isinstance(model, dict):  # SessionStart may deliver a model object
         model = model.get("id") or model.get("model") or ""
-    if not model:
-        sys.exit(0)
 
     event = payload.get("hook_event_name", "UserPromptSubmit")
     anchor = event in ANCHOR_EVENTS
@@ -124,18 +136,11 @@ def main():
     except (TypeError, ValueError):
         interval = 10
 
-    dedupe_key = "%s|%s" % (event, payload.get("prompt_id") or "")
-    turn = turn_number(payload.get("session_id") or "session", anchor, dedupe_key)
-    if turn is None:
-        sys.exit(0)  # another installed copy already injected the reminder for this event
-
-    full = True if interval <= 1 else turn % interval == 1
-
     # Agent ids go through agent_ref, never straight from the config: the fragments tell the model how to spawn a
     # sibling, and a plugin-served agent only answers to `model-tier-policy:<role>`. The two fixed roles below have no
     # config key — the config decides *which* role is named, this decides how it is spelled.
     values = {
-        "model": model,
+        "model": model or "an unknown model",
         "executor": agent_ref(root, cfg["executor_agent"]),
         "runner": agent_ref(root, cfg["runner_agent"]),
         "scout": agent_ref(root, cfg["scout_agent"]),
@@ -164,6 +169,27 @@ def main():
             "orchestrator_model": models["orchestrator"],
         }
     )
+    values["orchestrator_state"] = (
+        "on (the coordinator's tier is %s; a session above it stands down)" % models["orchestrator"]
+        if orchestrator_active(cfg)
+        else "off"
+    )
+
+    if not model:
+        # No assistant entry in the transcript yet: a fresh SessionStart, or the first prompt. The posture cannot be
+        # resolved, so say that rather than nothing — the guard resolves it at the first tool call, and the next prompt
+        # carries the full reminder. The turn counter is left alone so that reminder is a full one.
+        context = render("pending", values)
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
+        sys.exit(0)
+
+    dedupe_key = "%s|%s" % (event, payload.get("prompt_id") or "")
+    turn = turn_number(payload.get("session_id") or "session", anchor, dedupe_key)
+    if turn is None:
+        sys.exit(0)  # another installed copy already injected the reminder for this event
+
+    full = True if interval <= 1 else turn % interval == 1
+
     name = posture(cfg, model)
     # A disabled policy announces itself on every turn — one line, no brief variant — because a policy that has
     # gone quiet is indistinguishable from one that is working.

@@ -11,6 +11,11 @@ claim costs more to correct than the call costs to make: it produces contradicto
 that already landed. The state to distrust most is the state you yourself set — it is exactly what someone else has had
 time to change.
 
+A brief is where a stale claim does the most damage, because it outlives the memory it was written from. A brief names a
+branch, an issue, or a PR — never a sha for a ref that moves. A branch is rebased or force-pushed between the moment a
+sha is copied and the moment the agent acts on it, and the agent then builds on, or resets to, a commit the branch no
+longer has; a name resolves at the moment of use.
+
 ## Silence on no-op events
 
 An event that requires no action gets no user-facing text. Report state _changes_, not state _observations_: "still

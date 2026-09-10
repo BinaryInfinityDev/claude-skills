@@ -4,9 +4,11 @@
 Copies the rules file, pinned-model agents, hooks, and default config into <target>/.claude/, then merges the hook
 wiring into <target>/.claude/settings.json without disturbing existing settings.
 
-Idempotent: re-running updates the installer-owned files (the policy rule, hooks, agents), seeds the discipline rules
-and the operating-rules file only when absent — a repo copy that differs is kept and the shipped version written beside
-it as .new — and leaves your config and any other hooks alone.
+Idempotent: re-running updates the installer-owned files (the policy rule, hooks, agents) that actually changed and
+reports `keep` for the rest, seeds the discipline rules and the operating-rules file only when absent — a repo copy that
+differs is kept and the shipped version written beside it as .new — and leaves your config and any other hooks alone.
+The config it seeds is minimal: the keys a repo is expected to set. Every other key takes the guard's built-in default,
+so an upstream default change reaches the repo without an edit, and re-runs report the keys a config merely restates.
 
     python3 install.py --target /path/to/repo [--user] [--force] [--dry-run]
 
@@ -62,6 +64,7 @@ HOOK_FILES = [
     ("context/worker.md", "hooks/context/worker.md"),
     ("context/worker-brief.md", "hooks/context/worker-brief.md"),
     ("context/disabled.md", "hooks/context/disabled.md"),
+    ("context/pending.md", "hooks/context/pending.md"),
 ]
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [
@@ -78,6 +81,10 @@ AGENT_FILES = [
     ("git-steward.md", "agents/git-steward.md"),
 ]
 CONFIG = ("model-tier-policy.json", "model-tier-policy.json")
+# The keys the shipped config seeds. Everything else is read from the guard's DEFAULTS at run time, so a value that is
+# not in the repo's file follows upstream. A config that copies every default pins each one at the version it was
+# copied from — that is what the "restates a default" note below exists to surface.
+SEEDED_CONFIG_KEYS = ("orchestrator_mode", "bar_command", "paths")
 # Provenance stamp: which plugin version these installed files came from, so the skill can flag drift after a plugin
 # update and offer a re-run. Deliberately a text file, not part of the user-owned config.
 STAMP = "model-tier-policy.version"
@@ -109,8 +116,11 @@ def content_hash():
     # every directory before the loop runs, turning the prune into dead code. Determinism comes from sorting the
     # collected paths instead.
     for base, dirs, files in os.walk(PLUGIN_ROOT):
-        if "__pycache__" in dirs:
-            dirs.remove("__pycache__")
+        # Prune what is not plugin content: bytecode caches, and the hidden directories the harness writes into an
+        # installed cache — Claude Code marks a plugin in use with `.in_use/<pid>`, which differs per session. Hashing
+        # that made the stamp's hash unreproducible against any live cache, so every comparison reported drift. The
+        # manifest directory `.claude-plugin/` is content and stays in.
+        dirs[:] = [d for d in dirs if d != "__pycache__" and (d == ".claude-plugin" or not d.startswith("."))]
         for name in files:
             if not name.endswith(".pyc"):
                 entries.append(os.path.join(base, name))
@@ -275,6 +285,10 @@ def main():
             "error: agent or hook sources not found under %s — run install.py from a full model-tier-policy "
             "plugin directory (the skill directory alone does not carry the agents and hooks)" % PLUGIN_ROOT
         )
+    # The guard's DEFAULTS are the one source for every config value the shipped file does not seed: the notes below
+    # compare the repo's config against them, never against a second copy that could drift.
+    sys.path.insert(0, HOOKS_SRC)
+    from model_tier_guard import DEFAULTS as GUARD_DEFAULTS
 
     # Migrate installs that predate the consistent model-tier-policy naming: the config is renamed so its contents
     # survive, and the superseded rules file is removed so both copies don't load into every session.
@@ -301,7 +315,12 @@ def main():
         dest_path = os.path.join(claude, dest)
         if not os.path.exists(src_path):
             sys.exit("error: missing source file %s" % src_path)
-        verb = "update" if os.path.exists(dest_path) else "create"
+        if not os.path.exists(dest_path):
+            verb = "create"
+        elif same_content(src_path, dest_path):
+            verb = "keep"  # byte-identical, so the plan line reports no drift instead of announcing a rewrite
+        else:
+            verb = "update"
         plan.append((verb, dest_path, src_path))
     for src, dest in SEEDED_RULES:
         src_path = os.path.join(HERE, src)
@@ -327,6 +346,8 @@ def main():
     rename_pending = any(v == "rename" and n == config_dest for v, _o, n in migrations)
     existing_cfg_path = config_dest if os.path.exists(config_dest) else (legacy_config if rename_pending else None)
     stale_members = {}
+    restated = []
+    restated_models = []
     if existing_cfg_path is None:
         config_action = "create"
         config_note = ""
@@ -346,11 +367,23 @@ def main():
         # List values are the user's whole and entire once set: silently re-adding a member they removed would be the
         # --force lesson again. But a shipped member they simply never received (added after their install) looks
         # identical, so the skipped members are reported — the user decides which case each one is.
-        for key in shipped_cfg:
-            if isinstance(shipped_cfg[key], list) and isinstance(user_cfg.get(key), list):
-                missing = [m for m in shipped_cfg[key] if m not in user_cfg[key]]
+        for key in GUARD_DEFAULTS:
+            if isinstance(GUARD_DEFAULTS[key], list) and isinstance(user_cfg.get(key), list):
+                missing = [m for m in GUARD_DEFAULTS[key] if m not in user_cfg[key]]
                 if missing:
                     stale_members[key] = missing
+        # A key whose value is exactly the guard's default is not a setting, it is a pin: the guard would read the same
+        # value with the key absent, and with the key present an upstream change to that default never reaches this
+        # repo. Reported, never removed — the file is the user's — so the repo can decide to inherit.
+        restated = sorted(
+            key
+            for key in user_cfg
+            if key not in SEEDED_CONFIG_KEYS and key in GUARD_DEFAULTS and user_cfg[key] == GUARD_DEFAULTS[key]
+        )
+        if "models" not in restated and isinstance(user_cfg.get("models"), dict):
+            restated_models = sorted(
+                role for role, pin in user_cfg["models"].items() if GUARD_DEFAULTS["models"].get(role) == pin
+            )
 
     settings_path = os.path.join(claude, "settings.json")
     settings = load_json(settings_path)
@@ -381,14 +414,14 @@ def main():
             print("  %-6s %s (%s)" % (verb, old, new))
     # The operating-rules seed goes wherever the repo's config points paths.operating_rules; a config the installer is
     # about to create or reset means the shipped default applies.
-    paths_cfg = dict(shipped_cfg.get("paths") or {})
+    paths_cfg = dict(GUARD_DEFAULTS["paths"])
     if existing_cfg_path is not None and not args.force:
         user_paths = load_json(existing_cfg_path).get("paths")
         if isinstance(user_paths, dict):
             paths_cfg.update({k: v for k, v in user_paths.items() if isinstance(v, str) and v})
     # Hand-installed agent copies get the configured model baked into their frontmatter pin: a local copy shadows
     # the plugin's, so this is the one place a repo's override reaches an agent that is spawned without a model.
-    models_cfg = dict(shipped_cfg.get("models") or {})
+    models_cfg = dict(GUARD_DEFAULTS["models"])
     if existing_cfg_path is not None and not args.force:
         user_models = load_json(existing_cfg_path).get("models")
         if isinstance(user_models, dict):
@@ -401,7 +434,7 @@ def main():
     # A configured path that does not exist is the guard's quietest failure: writes to the configured location are
     # allowed and writes to where the files actually live are denied, which reads as a broken hook. Only customized
     # values are checked — a default .claude/plans that does not exist yet is the normal state before the first plan.
-    shipped_paths = shipped_cfg.get("paths") or {}
+    shipped_paths = GUARD_DEFAULTS["paths"]
     path_warnings = []
     for key, value in sorted(paths_cfg.items()):
         if not isinstance(value, str) or value == shipped_paths.get(key):
@@ -424,7 +457,8 @@ def main():
                 dest_path
             )
         elif verb == "keep":
-            note = " (seeded rule, matches shipped)"
+            seeded = any(dest_path == os.path.join(claude, dest) for _src, dest in SEEDED_RULES)
+            note = " (seeded rule, matches shipped)" if seeded else " (matches shipped)"
         print("  %-6s %s%s" % (verb, dest_path, note))
     print("  %-6s %s%s" % (config_action, config_dest, config_note))
     for key, members in sorted(stale_members.items()):
@@ -432,10 +466,28 @@ def main():
             "  note   %s: shipped member%s not in your list (left alone — add if wanted): %s"
             % (key, "" if len(members) == 1 else "s", ", ".join(str(m) for m in members))
         )
+    if restated:
+        print(
+            "  note   restates the shipped default%s (drop to inherit upstream changes): %s"
+            % ("" if len(restated) == 1 else "s", ", ".join(restated))
+        )
+    if restated_models:
+        print(
+            "  note   models: shipped pin%s restated (drop to inherit upstream changes): %s"
+            % ("" if len(restated_models) == 1 else "s", ", ".join(restated_models))
+        )
     print("  %-6s %s (operating-rules seed%s)" % ("create" if op_rules_create else "keep", op_rules_dest,
                                                   "" if op_rules_create else " — yours once it exists"))
     stamp_path = os.path.join(claude, STAMP)
-    print("  %-6s %s (%s)" % ("update" if os.path.exists(stamp_path) else "create", stamp_path, plugin_version()))
+    # The stamp's first three lines are its identity; `installed:` is only the installing clock. Rewriting an unchanged
+    # stamp churned that line on every re-run, which made a no-op install look like a change in the diff.
+    stamp_identity = "model-tier-policy %s\ncontent: %s\nsource: %s\n" % (plugin_version(), content_hash(), stamp_source())
+    try:
+        with open(stamp_path, encoding="utf-8") as fh:
+            stamp_action = "keep" if "".join(fh.readlines()[:3]) == stamp_identity else "update"
+    except OSError:
+        stamp_action = "create"
+    print("  %-6s %s (%s)" % (stamp_action, stamp_path, plugin_version()))
     print("  %-6s %s (%s)" % ("merge", settings_path, settings_note))
 
     if args.dry_run:
@@ -499,16 +551,12 @@ def main():
         shutil.copyfile(op_rules_src, op_rules_dest)
 
     os.makedirs(claude, exist_ok=True)
-    with open(stamp_path, "w", encoding="utf-8") as fh:
-        fh.write(
-            "model-tier-policy %s\ncontent: %s\nsource: %s\ninstalled: %s\n"
-            % (
-                plugin_version(),
-                content_hash(),
-                stamp_source(),
-                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+    if stamp_action != "keep":
+        with open(stamp_path, "w", encoding="utf-8") as fh:
+            fh.write(
+                stamp_identity
+                + "installed: %s\n" % datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             )
-        )
 
     if settings_changed:
         os.makedirs(claude, exist_ok=True)

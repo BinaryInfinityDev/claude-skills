@@ -66,16 +66,14 @@ DEFAULTS = {
     "architect_agent": "architect",
     "senior_agent": "senior-developer",
     "steward_agent": "git-steward",
+    # Extra write globs beyond what `paths` implies (paths_write_globs derives plans/**, decisions/**, reviews/** and
+    # the operating-rules file from the configured locations, so those never need restating here). Only the
+    # coordination-triple suffixes are location-free. A default that named a tree — `docs/plans/**`, `decisions/**` —
+    # granted writes wherever that tree happened not to exist, which invites the file into the wrong place.
     "write_allowed": [
-        ".claude/plans/**",
-        "docs/plans/**",
         "**/*.plan.md",
         "**/*.tracker.md",
         "**/*.addendum.md",
-        ".claude/decisions/**",
-        "decisions/**",
-        ".claude/reviews/**",
-        ".claude/agent-operating-rules.md",
     ],
     "bash_allowed": [],
     "research_tools_allowed": [r"^(Read|Grep|Glob|WebFetch|WebSearch|NotebookRead)$"],
@@ -83,8 +81,9 @@ DEFAULTS = {
         r"^(Edit|MultiEdit|Write|NotebookEdit)$",
         r"^(Bash|BashOutput|KillShell)$",
         r"^Workflow$",
+        # `enable_`/`disable_` cover auto-merge: scheduling a merge is PR disposition, the steward's, like merging.
         r"^mcp__github__(create|update|push|merge|delete|add_|sub_issue|fork|assign|request_|resolve"
-        r"|unresolve|run_|actions_run|issue_write|pull_request_review_write)",
+        r"|unresolve|run_|actions_run|enable_|disable_|issue_write|pull_request_review_write)",
     ],
 }
 
