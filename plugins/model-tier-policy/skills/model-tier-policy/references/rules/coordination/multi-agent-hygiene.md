@@ -20,3 +20,11 @@ where they collide. Three incidents in two trial runs, all the same class: two w
 The session scratchpad is shared between concurrently running agents, not per-agent. Suffix every scratch path you write
 with an identifier unique to you (`scratchpad/run-bar.<agent-id>.sh`, or a random hex) — the same discipline the
 worktree naming already applies, for the same reason: one agent's file was overwritten mid-flight by another's.
+
+## Worktrees
+
+Temporary worktrees are a shared namespace too, and the failure is worse than an overwritten scratch file: one agent
+removing another's worktree mid-write. Name every worktree you create for your branch plus an identifier unique to you
+(`<branch>-<id>`, as the build-discipline rule already does for build worktrees), remove only the worktrees you created,
+and report — never remove — any other you find, however stale it looks: nothing in the tree says which are live. A
+coordinator that dispatches several agents which each create a worktree gives each its own branch or sequences them.

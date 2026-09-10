@@ -4,6 +4,10 @@ Work is split by model tier across eight roles, plus three supporting specialist
 `build-runner`, `build-analyst`, and `git-steward`, covered by frugality rules 7–8 and 10. This is a hard rule, enforced
 by `PreToolUse` hooks — not a preference.
 
+**This rule governs the session's main loop.** A spawned agent's definition is its contract and overrides the posture
+sections below: a `senior-developer` on Fable writes code, an `executor` on Opus implements, a `scout` reads — the guard
+skips every tool call made inside a subagent, and so does this rule.
+
 | Role                 | Agent              | Model                               | Owns                                                                                                |
 | -------------------- | ------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **Orchestrator**     | `orchestrator`     | Opus 5 (`claude-opus-5`)            | Coordination: tickets, plans, decomposition, dispatch, status — never implementation                |
@@ -22,8 +26,9 @@ does not answer to the bare name. The hook denials and reminders print the id th
 The models in the table are the shipped defaults. A repo overrides them per role in the `models` block of
 `.claude/model-tier-policy.json`; the reminders and denials print each role with its configured model, and every spawn
 passes that model explicitly — a plugin-served agent's own pin is only the fallback, and the guard refuses an unpinned
-spawn whose pin disagrees with the config. The orchestrator's model is enforced against the session: a session opened
-above it disables the policy for that session, with a notice every turn.
+spawn whose pin disagrees with the config. The orchestrator's model is a non-premium one by design, and it is enforced
+against the session: a session opened on the premium model while orchestrator mode is on is a conscious choice to work
+outside the policy for that session — the policy is suspended, with a notice every turn as the warning.
 
 The **senior developer** is the one premium-tier role that writes code — for work that cannot be reduced to a plan an
 executor could carry out. It may change the approach but not the goal, and it delegates its own reading to `scout` and
@@ -64,10 +69,10 @@ role's configured model (the `models` block) on every spawn; by default every ro
 
 Marked by `"orchestrator_mode": true` in `.claude/model-tier-policy.json`, or `MODEL_TIER_ORCHESTRATOR=on` for one
 session. Coordinate, never implement: decompose work into tickets (GitHub issues) and plan files, dispatch each task to
-the role that owns it with the model pinned, track what is in flight, report status. Read tickets and plans — never
-source or logs: a question about the code is a `scout` brief, a build is `build-runner`'s. Ask `architect` for decisions
-rather than making them, and cap every return. Procedural tools are hook-denied as on the premium tier; ticket writes
-are allowed.
+the role that owns it with the model pinned, track what is in flight, report status. Read tickets and the tracker, never
+the plan — hand off as the tracker dictates, passing the plan's references along — and never source or logs: a question
+about the code is a `scout` brief, a build is `build-runner`'s. Ask `architect` for decisions rather than making them,
+and cap every return. Procedural tools are hook-denied as on the premium tier; ticket writes are allowed.
 
 Project state lives in the plan/tracker/addendum triple (see the coordination-artifacts rule): edit tracker rows
 directly, dictate detail to `git-steward`, and never touch the addendum. At milestone boundaries have the steward

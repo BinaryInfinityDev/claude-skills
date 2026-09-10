@@ -10,6 +10,11 @@ accumulates — in a premium-tier session it spends exactly the budget it exists
 turn 1 and every `reminder_interval` turns after (default 10), and a one-line marker carries the turns in between.
 SessionStart and PostCompact always re-anchor with the full text.
 
+The model is read from the transcript, and a fresh session has no assistant entry in it at SessionStart or on its first
+prompt. Exiting silently there left the first turn — the whole of an autonomous single-turn session — with no reminder
+at all, so an unknown model now renders the posture-neutral `pending` fragment instead. It does not count as a turn: the
+first firing that knows the model is turn 1 and lands the full text.
+
 The injected text itself lives in context/*.md beside this script (see render below); this file is only the loader.
 """
 
@@ -23,7 +28,16 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from model_tier_guard import agent_ref, load_config, live_model, posture, project_dir, resolved_models, resolved_paths
+    from model_tier_guard import (
+        agent_ref,
+        load_config,
+        live_model,
+        orchestrator_active,
+        posture,
+        project_dir,
+        resolved_models,
+        resolved_paths,
+    )
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
@@ -57,8 +71,12 @@ def render(name, values):
         return text
 
 
-def turn_number(session_id, anchor, dedupe_key):
+def turn_number(session_id, anchor, dedupe_key, advance=True):
     """Turn counter for this session. Anchor events reset it so the next reminder is a full one.
+
+    `advance=False` records the event for de-duplication without counting it as a turn: the pending anchor fires before
+    the model is known and must not use up the full-reminder slot that the first firing with a known model gets — but
+    it still goes through the duplicate check below, or two installed copies would both inject it.
 
     Returns None when this is a duplicate firing of an event already handled. If the policy is installed at both user
     and project scope, two copies of this hook run per event; without the check they would inject the reminder twice
@@ -88,7 +106,10 @@ def turn_number(session_id, anchor, dedupe_key):
     ):
         return None  # the other installed copy already injected for this event
 
-    count = 1 if anchor else int(state.get("turns", 0)) + 1
+    if advance:
+        count = 1 if anchor else int(state.get("turns", 0)) + 1
+    else:
+        count = int(state.get("turns", 0))
     try:
         with open(path, "w", encoding="utf-8") as fh:
             json.dump({"turns": count, "key": dedupe_key, "ts": now, "script": script}, fh)
@@ -114,8 +135,6 @@ def main():
     model = payload.get("model") or live_model(payload.get("transcript_path")) or ""
     if isinstance(model, dict):  # SessionStart may deliver a model object
         model = model.get("id") or model.get("model") or ""
-    if not model:
-        sys.exit(0)
 
     event = payload.get("hook_event_name", "UserPromptSubmit")
     anchor = event in ANCHOR_EVENTS
@@ -124,18 +143,11 @@ def main():
     except (TypeError, ValueError):
         interval = 10
 
-    dedupe_key = "%s|%s" % (event, payload.get("prompt_id") or "")
-    turn = turn_number(payload.get("session_id") or "session", anchor, dedupe_key)
-    if turn is None:
-        sys.exit(0)  # another installed copy already injected the reminder for this event
-
-    full = True if interval <= 1 else turn % interval == 1
-
     # Agent ids go through agent_ref, never straight from the config: the fragments tell the model how to spawn a
     # sibling, and a plugin-served agent only answers to `model-tier-policy:<role>`. The two fixed roles below have no
     # config key — the config decides *which* role is named, this decides how it is spelled.
     values = {
-        "model": model,
+        "model": model or "an unknown model",
         "executor": agent_ref(root, cfg["executor_agent"]),
         "runner": agent_ref(root, cfg["runner_agent"]),
         "scout": agent_ref(root, cfg["scout_agent"]),
@@ -164,6 +176,32 @@ def main():
             "orchestrator_model": models["orchestrator"],
         }
     )
+    values["orchestrator_state"] = (
+        "on (the coordinator's tier is %s; a session above it stands down)" % models["orchestrator"]
+        if orchestrator_active(cfg)
+        else "off"
+    )
+
+    dedupe_key = "%s|%s" % (event, payload.get("prompt_id") or "")
+    session_key = payload.get("session_id") or "session"
+
+    if not model:
+        # No assistant entry in the transcript yet: a fresh SessionStart, or the first prompt. The posture cannot be
+        # resolved, so say that rather than nothing — the guard resolves it at the first tool call, and the next prompt
+        # carries the full reminder. The turn counter is left alone so that reminder is a full one; the duplicate check
+        # still runs, so a second installed copy does not inject the anchor twice.
+        if turn_number(session_key, anchor, dedupe_key, advance=False) is None:
+            sys.exit(0)  # another installed copy already injected the pending anchor for this event
+        context = render("pending", values)
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
+        sys.exit(0)
+
+    turn = turn_number(session_key, anchor, dedupe_key)
+    if turn is None:
+        sys.exit(0)  # another installed copy already injected the reminder for this event
+
+    full = True if interval <= 1 else turn % interval == 1
+
     name = posture(cfg, model)
     # A disabled policy announces itself on every turn — one line, no brief variant — because a policy that has
     # gone quiet is indistinguishable from one that is working.
