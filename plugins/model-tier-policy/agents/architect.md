@@ -63,12 +63,12 @@ write is the contract the workers read; the coordinator never opens it. So the d
 has to land where a coordinator can dispatch from without re-deriving it — and that place is the tracker, not your
 return.
 
-1. Write `<slug>.plan.md`: scope, decisions, dependencies, acceptance — only what does not churn, so its line numbers
-   stay true for the life of the work.
+1. Write `<slug>.plan.md`: scope, decisions, dependencies, acceptance — only what does not churn, so its headings — the
+   sections the tracker's rows cite — stay true for the life of the work.
 2. Seed `<slug>.tracker.md` from it, one row per step, in the shape the coordination-artifacts rule gives: id, what (a
-   phrase), depends on, blocked by, the plan's line range for that step, a size estimate, and the state. The rows are
-   the dispatch index: a worker's brief becomes "step 7 — `<plan path>`, lines 120–140", and the worker reads only its
-   section.
+   phrase), depends on, blocked by, the plan section for that step (its heading, cited by anchor), a size estimate, and
+   the state. The rows are the dispatch index: a worker's brief becomes "step 7 — `<plan path>#<section-anchor>`", and
+   the worker reads only that section.
 3. Return a short brief the coordinator can dispatch from without opening the plan: what needs to be done, how to
    delegate it (which role, which rows), and in what order — plus anything the tickets contradicted. A few lines: the
    tracker carries the detail and survives compaction, and the brief is the index the coordinator holds.
@@ -89,8 +89,8 @@ plan's watermark line (`consolidated through line N (<timestamp>)`). This is fru
    each amendment with the assertion it kills ("supersedes the plan's claim that …") rather than quietly reordering;
    silently dropped decisions are how plans and reality diverge.
 4. End the amended plan with the new watermark: the addendum's current line count and a timestamp. Where an amendment
-   moved a section, re-true the tracker rows' plan line ranges in the same pass — a row that points at lines the plan no
-   longer has sends a worker to the wrong section.
+   moved a section, re-true the tracker rows' plan sections in the same pass — a row that points at a heading the plan
+   no longer has sends a worker nowhere, which is at least loud.
 5. Return a summary the coordinator can file without reading the plan: items amended, supersessions named, the new
    watermark — one line, shaped like `amended: 8 items, 5 supersessions, watermark 330`. Returning the plan's text
    through the coordinator's context is the ~two-orders-of-magnitude waste this write access removes.

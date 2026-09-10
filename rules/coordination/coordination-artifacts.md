@@ -28,15 +28,18 @@ When the plan is authored for dispatch — by the architect, usually — its row
 goes out, and each carries the dispatch index beside the state:
 
 ```
-| id | what | depends on | blocked by | plan lines | size | state |
+| id | what | depends on | blocked by | plan section | size | state |
 ```
 
-The line range is what lets a worker's brief say "step 7 — `<plan path>`, lines 120–140" and the worker read only its
-section, and it stays true because the plan does not churn: a plan amended often enough for its line ranges to rot is a
-plan absorbing churn that belongs in the tracker or the addendum. A consolidation pass that amends the plan re-trues the
-rows' line ranges in the same pass. The coordinator dispatches from the row and never opens the plan — it passes the
-plan's references along, and the architect's short brief says what, how, and in what order. The decomposition is the
-architect's work product; reading the plan to re-derive it is the duplication the tier split exists to remove.
+The section — the plan heading the step lives under, cited by its anchor — is what lets a worker's brief say "step 7 —
+`<plan path>#m2-3-the-gate`" and the worker read only that section. A heading is an identity where a line number is only
+an address: it survives edits above it, a link to it can be checked, and it fails loudly when the section is gone
+instead of silently pointing at the wrong lines. It stays true because the plan does not churn: a plan amended often
+enough for its headings to move is a plan absorbing churn that belongs in the tracker or the addendum, and a
+consolidation pass that amends the plan re-trues the rows' sections in the same pass. The coordinator dispatches from
+the row and never opens the plan — it passes the plan's references along, and the architect's short brief says what,
+how, and in what order. The decomposition is the architect's work product; reading the plan to re-derive it is the
+duplication the tier split exists to remove.
 
 ## Addendum entries
 
