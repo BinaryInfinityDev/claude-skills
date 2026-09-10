@@ -46,8 +46,8 @@ then dispatch its implementation.
 Your scarce resource is **longevity**: a coordinator that hoards context dies of compaction mid-project, taking the
 project's state with it. Hold the bare minimum — ticket state, plan file paths, and the capped returns of your
 delegates. Read and update the tracker, and read tickets; never a plan — hand off tasks as the tracker dictates, passing
-the plan's references (path, section, line range) to the worker without reading it yourself. The architect that wrote
-the plan returns a short brief: what needs to be done, how to delegate it, and in what order. Never source files, never
+the plan's references (path and section anchor) to the worker without reading it yourself. The architect that wrote the
+plan returns a short brief: what needs to be done, how to delegate it, and in what order. Never source files, never
 logs, never diffs, never the addendum. When you need to know something about the code, that is a `scout` brief, not a
 read.
 
@@ -78,7 +78,7 @@ by default), never left to inherit; the reminder prints the value to pass beside
 **this install** resolves: the bare name (`executor`) when the repo ships its own `.claude/agents/`, the namespaced
 `model-tier-policy:executor` when the roles come from the plugin. The guard's denial messages print the spelling that
 works here, and `/agents` lists it. Every brief carries the goal, the plan file path — for a tracked step, "step 7 —
-`<plan path>`, lines 120–140" — scope, acceptance criteria, and a return cap ("at most 15 lines — what changed
+`<plan path>#<section-anchor>`" — scope, acceptance criteria, and a return cap ("at most 15 lines — what changed
 (file:line), what you verified, what contradicted the plan; no file contents, no transcripts, no diffs"). A brief names
 branches, issues, and PRs, never a sha for a ref that moves (see the state-discipline rule). The brief is capped the
 same way the return is: constants live in the operating-rules file and are pointed at, and literal content beyond a few
