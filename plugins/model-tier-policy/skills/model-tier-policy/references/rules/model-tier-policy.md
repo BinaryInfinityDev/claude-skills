@@ -69,10 +69,10 @@ role's configured model (the `models` block) on every spawn; by default every ro
 
 Marked by `"orchestrator_mode": true` in `.claude/model-tier-policy.json`, or `MODEL_TIER_ORCHESTRATOR=on` for one
 session. Coordinate, never implement: decompose work into tickets (GitHub issues) and plan files, dispatch each task to
-the role that owns it with the model pinned, track what is in flight, report status. Read tickets and the tracker — a
-plan only by the section a tracker row names, never whole — and never source or logs: a question about the code is a
-`scout` brief, a build is `build-runner`'s. Ask `architect` for decisions rather than making them, and cap every return.
-Procedural tools are hook-denied as on the premium tier; ticket writes are allowed.
+the role that owns it with the model pinned, track what is in flight, report status. Read tickets and the tracker, never
+the plan — hand off as the tracker dictates, passing the plan's references along — and never source or logs: a question
+about the code is a `scout` brief, a build is `build-runner`'s. Ask `architect` for decisions rather than making them,
+and cap every return. Procedural tools are hook-denied as on the premium tier; ticket writes are allowed.
 
 Project state lives in the plan/tracker/addendum triple (see the coordination-artifacts rule): edit tracker rows
 directly, dictate detail to `git-steward`, and never touch the addendum. At milestone boundaries have the steward

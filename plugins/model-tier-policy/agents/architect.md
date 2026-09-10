@@ -69,9 +69,9 @@ return.
    phrase), depends on, blocked by, the plan's line range for that step, a size estimate, and the state. The rows are
    the dispatch index: a worker's brief becomes "step 7 — `<plan path>`, lines 120–140", and the worker reads only its
    section.
-3. Return the row count, the steps you could not size or order, and anything the tickets contradicted — a few lines.
-   Returning the outline itself puts the decomposition into the coordinator's context, where compaction erases it; the
-   tracker survives.
+3. Return a short brief the coordinator can dispatch from without opening the plan: what needs to be done, how to
+   delegate it (which role, which rows), and in what order — plus anything the tickets contradicted. A few lines: the
+   tracker carries the detail and survives compaction, and the brief is the index the coordinator holds.
 
 ## The consolidation duty
 

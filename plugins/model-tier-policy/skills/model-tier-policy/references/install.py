@@ -300,6 +300,38 @@ def main():
     if os.path.exists(legacy_rule):
         migrations.append(("remove", legacy_rule, "superseded by the model-tier-policy name"))
 
+    # The config's location decides which models block applies, and the models block decides what an agent copy's
+    # content will be — so both are resolved before the plan compares sources against what is installed.
+    config_src = os.path.join(HERE, CONFIG[0])
+    config_dest = os.path.join(claude, CONFIG[1])
+    shipped_cfg = load_json(config_src)
+    rename_pending = any(v == "rename" and n == config_dest for v, _o, n in migrations)
+    existing_cfg_path = config_dest if os.path.exists(config_dest) else (legacy_config if rename_pending else None)
+    # Hand-installed agent copies get the configured model baked into their frontmatter pin: a local copy shadows
+    # the plugin's, so this is the one place a repo's override reaches an agent that is spawned without a model.
+    models_cfg = dict(GUARD_DEFAULTS["models"])
+    if existing_cfg_path is not None and not args.force:
+        user_models = load_json(existing_cfg_path).get("models")
+        if isinstance(user_models, dict):
+            models_cfg.update({k: v for k, v in user_models.items() if isinstance(v, str) and v})
+
+    def rendered(src_path, dest_path):
+        """The bytes the installer would write at dest_path: the source, with an agent copy's model pin swapped for the
+        configured one. Comparing against this — not the raw source — is what lets a copy carrying a configured model
+        report `keep`; against the source it could only ever read `update`."""
+        role = os.path.splitext(os.path.basename(dest_path))[0]
+        configured = models_cfg.get(role) if os.path.basename(os.path.dirname(dest_path)) == "agents" else None
+        # A configured value goes into YAML frontmatter verbatim, so it must be a plain token — anything else would
+        # break the definition's frontmatter silently (Claude Code drops all fields on a parse error).
+        if configured and not re.match(r"^[A-Za-z0-9._-]+$", configured):
+            print("warning: models.%s = %r is not a plain model id; the shipped pin is kept" % (role, configured))
+            configured = None
+        with open(src_path, "rb") as fh:
+            data = fh.read()
+        if configured:
+            data = re.sub(rb"^(model:\s*).*$", (r"\g<1>%s" % configured).encode("utf-8"), data, count=1, flags=re.MULTILINE)
+        return data
+
     plan = []
     sources = [(os.path.join(HERE, src), dest) for src, dest in FILES]
     if files_only:
@@ -317,10 +349,11 @@ def main():
             sys.exit("error: missing source file %s" % src_path)
         if not os.path.exists(dest_path):
             verb = "create"
-        elif same_content(src_path, dest_path):
-            verb = "keep"  # byte-identical, so the plan line reports no drift instead of announcing a rewrite
         else:
-            verb = "update"
+            with open(dest_path, "rb") as fh:
+                installed = fh.read()
+            # Byte-identical to what would be written, so the plan line reports no drift instead of a rewrite.
+            verb = "keep" if installed == rendered(src_path, dest_path) else "update"
         plan.append((verb, dest_path, src_path))
     for src, dest in SEEDED_RULES:
         src_path = os.path.join(HERE, src)
@@ -340,11 +373,6 @@ def main():
     # bar_command default without losing the values it set), and --force — the full reset — backs the file up and
     # says which local values it is discarding. A silent reset of repo-specific config is how a trial site lost its
     # bar command to a habitual --force.
-    config_src = os.path.join(HERE, CONFIG[0])
-    config_dest = os.path.join(claude, CONFIG[1])
-    shipped_cfg = load_json(config_src)
-    rename_pending = any(v == "rename" and n == config_dest for v, _o, n in migrations)
-    existing_cfg_path = config_dest if os.path.exists(config_dest) else (legacy_config if rename_pending else None)
     stale_members = {}
     restated = []
     restated_models = []
@@ -419,14 +447,6 @@ def main():
         user_paths = load_json(existing_cfg_path).get("paths")
         if isinstance(user_paths, dict):
             paths_cfg.update({k: v for k, v in user_paths.items() if isinstance(v, str) and v})
-    # Hand-installed agent copies get the configured model baked into their frontmatter pin: a local copy shadows
-    # the plugin's, so this is the one place a repo's override reaches an agent that is spawned without a model.
-    models_cfg = dict(GUARD_DEFAULTS["models"])
-    if existing_cfg_path is not None and not args.force:
-        user_models = load_json(existing_cfg_path).get("models")
-        if isinstance(user_models, dict):
-            models_cfg.update({k: v for k, v in user_models.items() if isinstance(v, str) and v})
-
     op_rules_src = os.path.join(HERE, OPERATING_RULES_TEMPLATE)
     op_rules_dest = os.path.join(root, paths_cfg.get("operating_rules") or ".claude/agent-operating-rules.md")
     op_rules_create = os.path.exists(op_rules_src) and not os.path.exists(op_rules_dest)
@@ -507,27 +527,15 @@ def main():
                 pass
 
     for verb, dest_path, src_path in plan:
-        if verb == "keep":
-            continue
         if verb == "drift":
             shutil.copyfile(src_path, dest_path + ".new")
             continue
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        role = os.path.splitext(os.path.basename(dest_path))[0]
-        configured = models_cfg.get(role) if os.path.basename(os.path.dirname(dest_path)) == "agents" else None
-        # A configured value goes into YAML frontmatter verbatim, so it must be a plain token — anything else would
-        # break the definition's frontmatter silently (Claude Code drops all fields on a parse error).
-        if configured and not re.match(r"^[A-Za-z0-9._-]+$", configured):
-            print("warning: models.%s = %r is not a plain model id; the shipped pin is kept" % (role, configured))
-            configured = None
-        if configured:
-            with open(src_path, encoding="utf-8") as fh:
-                text = fh.read()
-            text, swapped = re.subn(r"^(model:\s*).*$", r"\g<1>%s" % configured, text, count=1, flags=re.MULTILINE)
-            with open(dest_path, "w", encoding="utf-8") as fh:
-                fh.write(text)
-        else:
-            shutil.copyfile(src_path, dest_path)
+        if verb != "keep":
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            with open(dest_path, "wb") as fh:
+                fh.write(rendered(src_path, dest_path))
+        # A kept hook is still made executable: `keep` skips the write, not the mode, or a copy that lost its exec
+        # bit would stay broken for as long as its content matched.
         if dest_path.endswith(".py"):
             os.chmod(dest_path, 0o755)
 
