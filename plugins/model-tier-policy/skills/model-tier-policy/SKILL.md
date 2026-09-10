@@ -619,15 +619,15 @@ whichever tier coordinates.
 (`haiku < sonnet < opus < fable`) to `models.orchestrator`. Equal or lower — a cheaper coordinator is fine — and the
 orchestrator posture applies. Higher, and the policy is **disabled for that session**: the guard allows everything and
 the reminder hook injects a one-line notice every turn saying so and how to restore it (open the session on the
-configured model, raise `models.orchestrator`, or turn `orchestrator_mode` off to get the premium posture). The policy
-stands down rather than coordinate on a costlier tier than the repo chose, and it never does so silently — a policy that
-goes quiet is indistinguishable from one that is working. An unrecognized model id on either side keeps the
-pre-enforcement behavior.
+configured model, or turn `orchestrator_mode` off to get the premium posture). The policy stands down rather than
+coordinate on a costlier tier than the repo chose, and it never does so silently — a policy that goes quiet is
+indistinguishable from one that is working. An unrecognized model id on either side keeps the pre-enforcement behavior.
 
-That makes `models.orchestrator` a ceiling as much as a pin. A repo that launches coordinator sessions on more than one
-tier sets it to the highest of them — `fable`, say — so every session at or below it coordinates, and the disabled
-posture can never occur. Leave it at `opus` only where a Fable-launched session is meant to run unpoliced, knowing that
-the per-turn notice is then the only thing between that session and the drift the policy exists to stop.
+The orchestrator role requires a non-premium model, `opus` or lower, by design: `models.orchestrator` names the tier
+coordinator sessions are launched on, never a premium one. A session opened on the premium model while orchestrator mode
+is on is the user's conscious choice to work outside the policy for that session — the policy is suspended, the per-turn
+notice is the warning, and nothing else changes. To work under the policy again, open the session on the configured
+model, or set `orchestrator_mode` false to take the premium posture.
 
 **The `Agent` check matters more than it looks.** A subagent's model defaults to `inherit`, so a Fable session that
 spawns a general-purpose agent runs that agent _on Fable_ — the most expensive possible way to grep. The guard accepts a
