@@ -1,6 +1,6 @@
 {
   "name": "project-management",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Ingest raw data into a project's artifact store; record numbered architecture/design decisions",
   "author": {
     "name": "BinaryInfinityDev"

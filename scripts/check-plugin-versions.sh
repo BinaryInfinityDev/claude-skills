@@ -26,8 +26,11 @@ for plugin in plugins/*/; do
     fail=1
   fi
   [ -z "$new" ] && continue
-  version_re=$(printf '%s' "$new" | sed 's/\./\\./g')
-  if ! git show ":${plugin}CHANGELOG.md" 2>/dev/null | grep -qE "^## ${version_re}( |\$)"; then
+  # Every ERE metacharacter a version string could carry is escaped — `.` always, `+` in build metadata — so the
+  # patterns below match the version literally; the end-of-line alternative is single-quoted so the shell passes it
+  # through untouched.
+  version_re=$(printf '%s' "$new" | sed 's/[].[*^$+?(){}|]/\\&/g')
+  if ! git show ":${plugin}CHANGELOG.md" 2>/dev/null | grep -qE "^## ${version_re}"'( |$)'; then
     echo "error: plugin '$name' is at $new but ${plugin}CHANGELOG.md has no '## $new' entry — record the change" >&2
     fail=1
   fi

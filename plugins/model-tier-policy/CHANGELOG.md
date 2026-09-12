@@ -1,7 +1,7 @@
 # model-tier-policy — version history
 
-Newest first. Each entry names the pull request that merged it. A version number a review round consumed on the branch
-and never merged as such is listed under the entry that superseded it, because a branch-pinned install could have
+Newest first. Each release entry names the pull request that merged it. A version number a review round consumed on the
+branch and never merged as such is listed under the entry that superseded it, because a branch-pinned install could have
 fetched it and versions only move forward once fetchable. **Outstanding** collects what is known and not yet done; an
 entry that settles one of its items says so.
 
@@ -20,10 +20,12 @@ entry that settles one of its items says so.
   Code CLI behaviour, not a plugin defect; the skill's remote section says to check `git diff` after a teardown (#16).
 - `build-analyst` is Gradle-first. Maven support is deliberately absent rather than shipped untested (#7).
 
-## 1.8.7 — 2026-09-12 — this history ([#34](https://github.com/BinaryInfinityDev/claude-skills/issues/34))
+## 1.8.8 — 2026-09-12 — [#35](https://github.com/BinaryInfinityDev/claude-skills/pull/35)
 
-- **Added:** this version history, and the README's plugin table now links it. Nothing else changed; the pre-commit hook
-  treats every file under the plugin as content, so adding the file took a patch bump.
+- **Added:** this version history ([#34](https://github.com/BinaryInfinityDev/claude-skills/issues/34)), and the
+  README's plugin table now links it. Nothing else changed: the pre-commit hook treats every file under the plugin as
+  content, so adding the file took a patch bump, and the review round that reworded it took another — 1.8.7 was consumed
+  on the branch.
 
 ## 1.8.6 — 2026-09-12 — [#33](https://github.com/BinaryInfinityDev/claude-skills/pull/33)
 
