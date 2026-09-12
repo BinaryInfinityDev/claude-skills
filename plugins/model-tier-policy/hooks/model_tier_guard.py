@@ -45,26 +45,41 @@ DEFAULTS = {
     # Investigation tools the orchestrator posture never gets: the answer to any of these is a scout's brief.
     "orchestrator_investigation_denied": [
         r"^(Grep|WebFetch|WebSearch|NotebookRead)$",
-        r"^mcp__github__(get_commit|list_commits|search_code|get_file_contents|actions_|get_job_logs|get_check_run$)",
+        r"^mcp__github__(get_commit|list_commits|search_commits|search_code|get_file_contents|actions_|get_job_logs"
+        r"|get_check_run$|get_latest_release|get_release_by_tag|list_releases|get_tag$|list_tags)",
     ],
-    # GitHub reads that return state rather than content — allowed on the orchestrator posture, but budgeted.
+    # GitHub reads that return state rather than content — allowed on the orchestrator posture, but budgeted. Any
+    # other GitHub read the posture reaches is budgeted the same way, so a tool this list does not name is never a
+    # free read; the list documents the intended set.
     "orchestrator_state_reads": [
         r"^mcp__github__(issue_read|pull_request_read|list_issues|list_pull_requests|search_issues"
-        r"|search_pull_requests)$"
+        r"|search_pull_requests|list_branches)$"
     ],
     # Consumed by model_tier_receipt.py: the size past which a subagent's return is filed and cut down to a receipt.
     "return_cap_chars": 1500,
     # Who may merge. Authorization is project policy, kept outside the orchestration policy on purpose: it is read
     # from this file, never from what a session remembers, and it binds every agent in the session, subagents
     # included. "owner" (the default) denies merging and auto-merge to the session entirely; "session" lets it.
+    # The command patterns are a tripwire over the ordinary spellings, not a boundary — a shell can always be made to
+    # say something the regexes do not cover; GitHub branch protection is the boundary. `{branches}` in a pattern is
+    # replaced by the protected-branch alternation.
     "authorization": {
         "merge_authority": "owner",
+        "protected_branches": ["main", "master"],
         "merge_tools": [r"^mcp__github__(merge_pull_request|enable_pr_auto_merge|disable_pr_auto_merge)$"],
+        # Tools that write straight to a branch: denied when their `branch` argument is a protected branch.
+        "branch_write_tools": [r"^mcp__github__(push_files|create_or_update_file|delete_file)$"],
         "merge_commands": [
+            # git push naming a protected branch as a refspec: `origin main`, `HEAD:main`, `HEAD:refs/heads/main`,
+            # `+main`, `:main` (a delete), quoted or not, with `-c`/`-C`/--git-dir options before `push`.
+            r"\bgit(?:\s+-[cC]\s*\S+|\s+--(?:git-dir|work-tree|namespace)=\S+)*\s+push\b[^;&|]*?"
+            r"(?:[\s:+\"'])(?:refs/heads/)?(?:{branches})(?![\w./-])",
             r"\bgh\s+pr\s+merge\b",
-            r"\bgh\s+api\b.*/merge\b",
-            r"\bgit\s+push\b.*\s(main|master)(\s|$)",
-            r"\bgit\s+push\b.*:(main|master)(\s|$)",
+            # gh api with a mutating method or fields against a merge endpoint; the bare GET `pulls/N/merge` ("is it
+            # merged?") is a reconciliation read and stays allowed.
+            r"\bgh\s+api\b(?=[^;&|]*(?:(?:-X|--method)[\s=]*(?:PUT|POST|PATCH)|\s-[fF]\s|\s--(?:raw-)?field[\s=]"
+            r"|\s--input[\s=]))[^;&|]*/merges?(?![\w-])",
+            r"\bgh\s+api\s+graphql\b[^;&|]*\b(?:mergePullRequest|enablePullRequestAutoMerge)\b",
         ],
     },
     # Tools a coordinating session may use even though they mutate external state — on the premium posture as much
@@ -542,10 +557,12 @@ def resolved_authorization(cfg):
         authority = user.get("merge_authority")
         if isinstance(authority, str) and authority.strip().lower() == "session":
             auth["merge_authority"] = "session"
-        for key in ("merge_tools", "merge_commands"):
+        for key in ("merge_tools", "merge_commands", "branch_write_tools", "protected_branches"):
             value = user.get(key)
-            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            if isinstance(value, list) and value and all(isinstance(item, str) and item for item in value):
                 auth[key] = value
+    branches = "|".join(re.escape(b) for b in auth["protected_branches"])
+    auth["merge_commands"] = [p.replace("{branches}", branches) for p in auth["merge_commands"]]
     return auth
 
 
@@ -561,6 +578,10 @@ def check_authorization(cfg, tool, tool_input):
     hit = None
     if matches_any(auth["merge_tools"], tool):
         hit = tool
+    elif matches_any(auth["branch_write_tools"], tool):
+        branch = tool_input.get("branch")
+        if isinstance(branch, str) and branch.strip() in auth["protected_branches"]:
+            hit = "%s to %s" % (tool, branch.strip())
     elif tool == "Bash":
         command = tool_input.get("command")
         if isinstance(command, str) and matches_any(auth["merge_commands"], command):
@@ -778,8 +799,8 @@ def orchestrator_reads(root, cfg, refs, models, payload, tool, tool_input):
     scout = refs["scout_agent"]
     scout_model = role_model(models, refs["scout_agent"], "scout")
     scout_hint = (
-        'Send a scout: Agent(subagent_type="%s", model="%s", prompt=<the question, the paths, and "return findings '
-        'only — no file contents, max 15 lines">).' % (scout, scout_model)
+        'Send a scout: Agent(subagent_type="%s", model="%s", prompt=<the question, the paths, and "return a receipt '
+        '— outcome, object, evidence, actor, uncertainty, next_action, details — no file contents">).' % (scout, scout_model)
     )
 
     method = tool_input.get("method")
@@ -819,7 +840,11 @@ def orchestrator_reads(root, cfg, refs, models, payload, tool, tool_input):
                 "files live there. Anything else is a scout's question.\n%s" % (plans, scout_hint)
             )
         counted = True
-    elif matches_any(cfg_list(cfg, "orchestrator_state_reads"), tool):
+    elif matches_any(cfg_list(cfg, "orchestrator_state_reads"), tool) or (
+        tool.startswith("mcp__github__") and not matches_any(cfg_list(cfg, "procedural_tools_denied"), tool)
+    ):
+        # Every GitHub *read* this posture reaches is a state read for budget purposes — none is free. A mutating
+        # GitHub tool is not a read: it falls through to the procedural denial below, never to the allow here.
         counted = True
 
     if not counted:
@@ -901,7 +926,7 @@ def main():
     executor_model = role_model(models, refs["executor_agent"], "executor")
     delegate_hint = (
         "Delegate it: Agent(subagent_type=\"%s\", model=\"%s\", prompt=<goal, plan file path, scope, "
-        "acceptance criteria, and a return cap of 15 lines>)." % (refs["executor_agent"], executor_model)
+        "acceptance criteria, and the return contract: a receipt under the cap>)." % (refs["executor_agent"], executor_model)
     )
 
     if tool in ("Agent", "Task"):  # the subagent-spawn tool is named Task in some Claude Code builds
@@ -993,7 +1018,7 @@ def main():
             deny(
                 "Model tier policy: orientation budget spent (%d/%d reads this turn) and you are %s. %s\n"
                 "Send a scout instead: Agent(subagent_type=\"%s\", model=\"%s\", prompt=<the question, the paths to "
-                "search, and 'return findings only — no file contents, max 15 lines'>)."
+                "search, and 'return a receipt — no file contents'>)."
                 % (count, budget, role, scarcity, refs["scout_agent"], role_model(models, refs["scout_agent"], "scout"))
             )
 
@@ -1004,4 +1029,10 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
+        # Fail open — but never silently in a test bed: MODEL_TIER_DEBUG=1 surfaces the traceback on stderr so a
+        # check can tell allow-by-design from allow-by-crash (#31, finding 2). The exit code stays 0 either way.
+        if os.environ.get("MODEL_TIER_DEBUG"):
+            import traceback
+
+            traceback.print_exc()
         sys.exit(0)

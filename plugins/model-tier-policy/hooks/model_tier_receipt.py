@@ -63,17 +63,31 @@ def file_receipt(root, cfg, payload, name, text):
     return os.path.relpath(path, root)
 
 
-def response_text(response):
-    """The text a tool response carries, for measuring — a string, a text-block list, or a dict's longest string."""
-    if isinstance(response, str):
-        return response
-    if isinstance(response, list):
-        parts = [block.get("text") for block in response if isinstance(block, dict) and isinstance(block.get("text"), str)]
-        return "\n".join(parts) if parts else json.dumps(response)
+# The keys of a dict response that carry the subagent's text, in the order tried. The Agent tool's response is a dict
+# with the return under `content` (a list of text blocks) beside the coordinator's own `prompt` — which must never be
+# what gets measured or cut: a long brief is not a long return.
+TEXT_KEYS = ("content", "text", "result", "output")
+
+
+def response_body(response):
+    """(the part of a response that is the subagent's text, its key) — the key is None for a bare string or list."""
     if isinstance(response, dict):
-        strings = [value for value in response.values() if isinstance(value, str)]
-        return max(strings, key=len) if strings else json.dumps(response)
-    return "" if response is None else str(response)
+        for key in TEXT_KEYS:
+            if key in response and isinstance(response[key], (str, list)):
+                return response[key], key
+        return None, None
+    return response, None
+
+
+def response_text(response):
+    """The text a tool response carries, for measuring — a string, a text-block list, or a dict's text field."""
+    body, _key = response_body(response)
+    if isinstance(body, str):
+        return body
+    if isinstance(body, list):
+        parts = [block.get("text") for block in body if isinstance(block, dict) and isinstance(block.get("text"), str)]
+        return "\n".join(parts)
+    return ""
 
 
 def cut(text, cap, path):
@@ -81,25 +95,30 @@ def cut(text, cap, path):
     return text[:cap] + trailer
 
 
-def replaced_response(response, cap, path):
-    """The tool response with its text cut down, in the same shape — a mismatched shape is ignored by Claude Code,
-    which is the safe failure: the original output stands and the context line still says where the full text is."""
-    if isinstance(response, str):
-        return cut(response, cap, path)
-    if isinstance(response, list):
+def cut_body(body, cap, path):
+    if isinstance(body, str):
+        return cut(body, cap, path)
+    if isinstance(body, list):
         out = []
-        for block in response:
+        for block in body:
             if isinstance(block, dict) and isinstance(block.get("text"), str) and len(block["text"]) > cap:
                 block = dict(block, text=cut(block["text"], cap, path))
             out.append(block)
         return out
-    if isinstance(response, dict):
-        strings = [(key, value) for key, value in response.items() if isinstance(value, str)]
-        if not strings:
-            return None
-        key, value = max(strings, key=lambda item: len(item[1]))
-        return dict(response, **{key: cut(value, cap, path)})
     return None
+
+
+def replaced_response(response, cap, path):
+    """The tool response with its text cut down, in the same shape — a mismatched shape is ignored by Claude Code,
+    which is the safe failure: the original output stands and the context line still says where the full text is.
+    Only the text field is touched; every other field, the coordinator's `prompt` included, is echoed untouched."""
+    body, key = response_body(response)
+    replacement = cut_body(body, cap, path)
+    if replacement is None:
+        return None
+    if key is None:
+        return replacement
+    return dict(response, **{key: replacement})
 
 
 def main():
@@ -171,4 +190,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
+        if os.environ.get("MODEL_TIER_DEBUG"):  # surface the traceback for the check; still fail open
+            import traceback
+
+            traceback.print_exc()
         sys.exit(0)

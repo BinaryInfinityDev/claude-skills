@@ -9,6 +9,7 @@ Every hook is exercised the way Claude Code drives it — a JSON payload on stdi
 model, CLAUDE_PROJECT_DIR at a scratch repo, HOME at a sandbox so no user-scope config overlays.
 """
 
+import atexit
 import json
 import os
 import re
@@ -27,6 +28,9 @@ RECEIPT = os.path.join(HOOKS, "model_tier_receipt.py")
 INSTALL = os.path.join(PLUGIN, "skills", "model-tier-policy", "references", "install.py")
 REFS = os.path.join(PLUGIN, "skills", "model-tier-policy", "references")
 SCRATCH = tempfile.mkdtemp(prefix="check-hooks-")
+atexit.register(shutil.rmtree, SCRATCH, ignore_errors=True)  # on every exit path, a crash included
+HOOK_TMP = os.path.join(SCRATCH, "tmp")  # the hooks' state files land here, never in the real temp dir
+os.makedirs(HOOK_TMP)
 RUN = os.urandom(3).hex()
 
 sys.path.insert(0, HOOKS)
@@ -68,14 +72,24 @@ def make_repo(cfg, model, agents=False):
 
 
 def run_hook(script, payload, env_extra=None):
+    """Drive a hook as Claude Code does. A hook that writes to stderr has crashed into its fail-open wrapper
+    (MODEL_TIER_DEBUG makes the wrapper print the traceback), and that is a failure of its own: without it an
+    "allowed" verdict and a crash look identical — the #31 finding-2 shape, inside the gate."""
     env = dict(os.environ)
     for key in ("MODEL_TIER_POLICY", "MODEL_TIER_ORCHESTRATOR", "CLAUDE_PLUGIN_ROOT"):
         env.pop(key, None)
     env["CLAUDE_PROJECT_DIR"] = payload["cwd"]
     env["HOME"] = payload["cwd"]
+    env["TMPDIR"] = HOOK_TMP
+    env["MODEL_TIER_DEBUG"] = "1"
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run([sys.executable, script], input=json.dumps(payload), capture_output=True, text=True, env=env)
+    if proc.stderr.strip():
+        count[0] += 1
+        failures.append("%s wrote to stderr on %s %s: %s" % (
+            os.path.basename(script), payload.get("hook_event_name"), payload.get("tool_name", ""),
+            proc.stderr.strip().splitlines()[-1][:160]))
     out = proc.stdout.strip()
     try:
         return json.loads(out) if out else None
@@ -209,6 +223,21 @@ check("auth: subagent gh pr merge denied", decision(guard(worker, tr_w, "Bash", 
 check("auth: subagent feature push allowed", decision(guard(worker, tr_w, "Bash", {"command": "git push -u origin feat/x"}, agent_id="a1")), None)
 check("auth: HEAD:master push denied", decision(guard(worker, tr_w, "Bash", {"command": "git push origin HEAD:master"})), "deny")
 check("auth: main-fix branch push allowed", decision(guard(worker, tr_w, "Bash", {"command": "git push origin main-fix"})), None)
+for command in ("git push origin HEAD:refs/heads/main", "git push origin refs/heads/main", "git push origin +main",
+                "git -C /repo push origin main", "git -c user.name=x push origin main", "git push origin 'main'",
+                "git push origin \"main\"", "git push origin main;", "git push origin :main",
+                "cd x && git push --force-with-lease origin main", "gh api -X PUT repos/o/r/pulls/5/merge",
+                "gh api --method PUT repos/o/r/pulls/5/merge", "gh api -X POST repos/o/r/merges -f base=main",
+                "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'"):
+    check("auth tripwire: %r denied" % command, decision(guard(worker, tr_w, "Bash", {"command": command})), "deny")
+for command in ("gh api repos/o/r/pulls/5/merge", "gh pr view 5", "git push origin mainline",
+                "git push origin feature/main-menu", "gh api repos/o/r/pulls/5/merge_requests", "git merge origin/main"):
+    check("auth tripwire: %r allowed" % command, decision(guard(worker, tr_w, "Bash", {"command": command})), None)
+check("auth: push_files to a protected branch denied for a subagent", decision(guard(worker, tr_w, "mcp__github__push_files", {"branch": "main", "files": []}, agent_id="a1")), "deny")
+check("auth: create_or_update_file to master denied", decision(guard(worker, tr_w, "mcp__github__create_or_update_file", {"branch": "master"})), "deny")
+check("auth: push_files to a feature branch allowed", decision(guard(worker, tr_w, "mcp__github__push_files", {"branch": "feat/x"}, agent_id="a1")), None)
+prot, tr_prot = make_repo({"authorization": {"protected_branches": ["release"]}}, "claude-opus-5")
+check("auth: configured protected_branches drive the tripwire", (decision(guard(prot, tr_prot, "Bash", {"command": "git push origin release"})), decision(guard(prot, tr_prot, "Bash", {"command": "git push origin main"}))), ("deny", None))
 session_cfg, tr_s = make_repo({"authorization": {"merge_authority": "session"}}, "claude-opus-5")
 check("auth: merge_authority session allows the merge", decision(guard(session_cfg, tr_s, "mcp__github__merge_pull_request", {})), None)
 bad_cfg, tr_b = make_repo({"authorization": {"merge_authority": None}}, "claude-opus-5")
@@ -239,6 +268,12 @@ check("orch Glob inside plans allowed", decision(guard(orch, tr_o, "Glob", {"pat
 check("orch Glob over src denied", decision(guard(orch, tr_o, "Glob", {"pattern": "src/**/*.py"})), "deny")
 check("orch pull_request_read get_diff denied", decision(guard(orch, tr_o, "mcp__github__pull_request_read", {"method": "get_diff"})), "deny")
 check("orch get_commit denied", decision(guard(orch, tr_o, "mcp__github__get_commit", {})), "deny")
+check("orch search_commits denied (commit messages were the #31 leak)", decision(guard(orch, tr_o, "mcp__github__search_commits", {})), "deny")
+check("orch list_releases denied", decision(guard(orch, tr_o, "mcp__github__list_releases", {})), "deny")
+sess_u = "u" + RUN
+for i in range(2):
+    guard(orch, tr_o, "mcp__github__get_me", {}, session=sess_u)
+check("orch: a GitHub read the lists do not name is still budgeted, never free", decision(guard(orch, tr_o, "mcp__github__get_me", {}, session=sess_u)), "deny")
 check("orch pull_request_read get allowed", decision(guard(orch, tr_o, "mcp__github__pull_request_read", {"method": "get"})), None)
 sess = "o" + RUN
 guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"}, session=sess)
@@ -269,10 +304,34 @@ t11 = context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p12")
 check("reminder: turn 11 full again", "state reads per turn" in t11)
 dd = context(disabled, tr_d, "UserPromptSubmit", "d" + RUN, prompt="p1")
 check("reminder: premium under orchestrator_mode -> DISABLED notice", "DISABLED" in dd)
+c0 = context(fresh, tr_f, "PostCompact", sess, trigger="auto")
+check("reminder: PostCompact renders nothing (Claude Code discards its output)", c0, "")
 c1 = context(fresh, tr_f, "SessionStart", sess, source="compact")
-check("reminder: SessionStart(compact) -> compaction fragment first", c1.startswith("[model tier policy — COMPACTION BOUNDARY") and "unverified" in c1)
+check("reminder: SessionStart(compact) after PostCompact -> compaction fragment first, full anchor after", c1.startswith("[model tier policy — COMPACTION BOUNDARY") and "unverified" in c1 and "orchestrator session" in c1)
 c2 = context(fresh, tr_f, "PostCompact", sess, trigger="auto")
-check("reminder: PostCompact right after -> anchor without a second compaction fragment", "COMPACTION BOUNDARY" not in c2 and "orchestrator session" in c2)
+check("reminder: PostCompact after SessionStart(compact) -> still nothing", c2, "")
+wsess = "wc" + RUN
+context(worker, tr_w, "SessionStart", wsess, source="startup")
+wc = context(worker, tr_w, "SessionStart", wsess, source="compact")
+check("reminder: worker posture gets the short compaction form", wc.startswith("[model tier policy — COMPACTION BOUNDARY") and "steward" not in wc and "executor tier" in wc)
+covsess = "cov" + RUN
+seen = set()
+context(orch, tr_o, "SessionStart", covsess, source="startup")
+for i in range(2, 22):
+    b = context(orch, tr_o, "UserPromptSubmit", covsess, prompt="c%d" % i)
+    if "Rule of the turn:" in b:
+        seen.add(b.split("Rule of the turn:", 1)[1].split("Full policy")[0].strip())
+clauses_orch = [" ".join(x.split()) for x in re.split(r"\n\s*\n", open(os.path.join(HOOKS, "context", "clauses-orchestrator.md")).read()) if x.strip() and not x.strip().startswith("#")]
+check("reminder: every orchestrator clause appears across two reminder cycles (none swallowed by the full turns)", len(seen), len(clauses_orch))
+rsess = "rl" + RUN
+context(orch, tr_o, "SessionStart", rsess, source="startup")
+context(orch, tr_o, "UserPromptSubmit", rsess, prompt="r2")
+guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"}, session=rsess, prompt="r2")
+guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"}, session=rsess, prompt="r2")
+b3 = context(orch, tr_o, "UserPromptSubmit", rsess, prompt="r3")
+check("reminder: reads counted in the previous turn are reported", "2/2 state reads" in b3)
+b4 = context(orch, tr_o, "UserPromptSubmit", rsess, prompt="r4")
+check("reminder: a turn with no reads reports 0, not the stale count", "0/2 state reads" in b4)
 sw = context(fresh, tr_f, "PostModelSwitch", sess, from_model="claude-opus-5", to_model="claude-fable-5-1")
 check("reminder: PostModelSwitch renders for to_model", "DISABLED" in sw and "claude-fable-5-1" in sw)
 pb = context(premium, tr_p, "UserPromptSubmit", "q" + RUN, prompt="p1")
@@ -297,7 +356,29 @@ os.remove(os.path.join(broken, "hooks", "context", "orchestrator.md"))
 fb = context(orch, tr_o, "SessionStart", "m" + RUN, source="startup", script=os.path.join(broken, "hooks", "model_tier_context.py"))
 check("reminder: missing fragment -> one-line fallback", "reminder fragments missing" in fb)
 
-# --------------------------------------------------------------------------------------------------------- receipt hook
+# ------------------------------------------------------------------------------------------------- allow vs crash
+# A hook that raises inside its fail-open wrapper must not read as "allowed": MODEL_TIER_DEBUG surfaces the traceback
+# on stderr and run_hook records it. Proven with a copy of the guard whose Glob anchor raises.
+broken_cfg, tr_bc = make_repo({"orchestrator_mode": True, "paths": {"plans": ["not", "a", "string"]}}, "claude-opus-5")
+before = len(failures)
+r = guard(broken_cfg, tr_bc, "Glob", {"pattern": ".claude/plans/*.md"})
+check("crash detection: a malformed paths block falls back to defaults — no crash, no stderr", len(failures) == before and decision(r) is None)
+crash_dir = tmp("crash")
+shutil.copytree(HOOKS, os.path.join(crash_dir, "hooks"), ignore=shutil.ignore_patterns("__pycache__"))
+crash_guard = os.path.join(crash_dir, "hooks", "model_tier_guard.py")
+src = open(crash_guard, encoding="utf-8").read()
+marker = "def glob_anchor(root, tool_input):\n"
+assert marker in src
+open(crash_guard, "w", encoding="utf-8").write(src.replace(marker, marker + "    raise RuntimeError('boom')\n", 1))
+before = len(failures)
+r = run_hook(crash_guard, call(orch, tr_o, "Glob", {"pattern": ".claude/plans/*.md"}))
+crashed = len(failures) == before + 1 and "RuntimeError" in failures[-1] and r is None
+if crashed:
+    failures.pop()  # the recorded crash is the expected one; the case below is what counts
+    count[0] -= 1
+check("crash detection: a raising code path is reported as a failure, never read as an allow", crashed)
+
+# ---------------------------------------------------------------------------------------------------------- receipt hook
 LONG = "x" * 3000
 def stop(root, tr, text, active=False):
     return {"cwd": root, "transcript_path": tr, "hook_event_name": "SubagentStop", "session_id": "r" + RUN,
@@ -314,9 +395,15 @@ post = {"cwd": orch, "transcript_path": tr_o, "hook_event_name": "PostToolUse", 
 r = run_hook(RECEIPT, post)
 hso = (r or {}).get("hookSpecificOutput", {})
 check("receipt: PostToolUse backstop cuts a string return and says where the full text is", "receipt cap" in hso.get("additionalContext", "") and isinstance(hso.get("updatedToolOutput"), str))
-post["tool_response"] = {"content": LONG, "status": "ok"}
+post["tool_response"] = {"status": "completed", "prompt": "p" * 2500, "agentId": "a1", "agentType": "executor",
+                         "content": [{"type": "text", "text": LONG}]}
 hso = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {})
-check("receipt: PostToolUse keeps a dict's shape", isinstance(hso.get("updatedToolOutput"), dict) and hso["updatedToolOutput"].get("status") == "ok")
+out = hso.get("updatedToolOutput")
+check("receipt: the real Agent shape — content blocks cut, prompt and siblings untouched",
+      isinstance(out, dict) and out.get("prompt") == "p" * 2500 and out.get("status") == "completed"
+      and isinstance(out.get("content"), list) and "full text is at" in out["content"][0]["text"])
+post["tool_response"] = {"status": "completed", "prompt": "p" * 2500, "content": [{"type": "text", "text": "done"}]}
+check("receipt: a long brief with a short return is not a long return", run_hook(RECEIPT, post), None)
 zero, tr_z = make_repo({"orchestrator_mode": True, "return_cap_chars": 0}, "claude-opus-5")
 check("receipt: return_cap_chars 0 disables", run_hook(RECEIPT, stop(zero, tr_z, LONG)), None)
 
@@ -454,7 +541,6 @@ plugin_events = set(json.load(open(os.path.join(HOOKS, "hooks.json")))["hooks"])
 snippet_events = set(json.load(open(os.path.join(REFS, "settings-snippet.json")))["hooks"])
 check("hooks.json and settings-snippet.json wire the same events", plugin_events, snippet_events)
 
-shutil.rmtree(SCRATCH, ignore_errors=True)
 print("check-hooks: %d cases, %d failed" % (count[0], len(failures)))
 for line in failures:
     print("  FAIL " + line)

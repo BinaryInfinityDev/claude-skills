@@ -19,8 +19,8 @@ could have read. So the rule is stronger than "don't let Fable edit files":
 
 > **Fable spends tokens on decisions, never on data.**
 
-This skill is **project-agnostic**. It ships an always-on rules file, a catalog of pinned-model subagents, and two hooks
-that enforce the split mechanically so the working model cannot quietly drift back into doing the work itself.
+This skill is **project-agnostic**. It ships an always-on rules file, a catalog of pinned-model subagents, and three
+hooks that enforce the split mechanically so the working model cannot quietly drift back into doing the work itself.
 
 ---
 
@@ -188,9 +188,11 @@ The `project-management` plugin's `record-decision` skill, where it is installed
 beyond the task.
 
 Decide deliberately whether plan files are session scratch or committed deliverables. Scratch: add the plans directory
-to `.gitignore`, or every session ends with an untracked-files warning from any tree-cleanliness hook. Deliverables:
-point `paths.plans` at the docs tree (`docs/plans/`, say) and let the steward commit them — consolidation then publishes
-the current plan as part of the repo. The installer edits neither `.gitignore` nor `paths`; the choice is the repo's.
+to `.gitignore`, or every session ends with an untracked-files warning from any tree-cleanliness hook — and add
+`paths.receipts` (default `.claude/receipts/`) the same way, since the receipt hook drops a file there for every return
+it cuts down. Deliverables: point `paths.plans` at the docs tree (`docs/plans/`, say) and let the steward commit them —
+consolidation then publishes the current plan as part of the repo. The installer edits neither `.gitignore` nor `paths`;
+the choice is the repo's.
 
 ### 2a. Stress-test the plan (optional)
 
@@ -324,10 +326,10 @@ The policy ships as the `model-tier-policy` plugin of the `claude-skills` market
 /plugin install model-tier-policy@claude-skills
 ```
 
-That activates the skill, all eleven agents, and both hooks immediately — enforcement and the reminder included, with
-the reminder's wording loaded from context fragments inside the plugin, so **plugin updates change what the hooks say
-with no further steps**. Third-party marketplaces do not auto-update by default: toggle auto-update per marketplace in
-`/plugin` → Marketplaces, or pull updates by hand with `claude plugin marketplace update claude-skills`.
+That activates the skill, all eleven agents, and all three hooks immediately — enforcement and the reminder included,
+with the reminder's wording loaded from context fragments inside the plugin, so **plugin updates change what the hooks
+say with no further steps**. Third-party marketplaces do not auto-update by default: toggle auto-update per marketplace
+in `/plugin` → Marketplaces, or pull updates by hand with `claude plugin marketplace update claude-skills`.
 
 Two per-repo pieces are file-shaped and cannot ride a plugin — the always-loaded rules files and the
 `.claude/model-tier-policy.json` config. Run the bundled installer once per repo to lay those down (it also stamps the
@@ -509,10 +511,10 @@ teardown.
 the files under `references/` are inert wherever the skill lives. Enforcement comes from `install.py`, which copies
 those files to the paths Claude Code actually reads. Both steps are useful and they are independent:
 
-| Step                                                                                                   | Gives you                                                         |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Copy `plugins/model-tier-policy/skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement         |
-| Run `install.py --target <repo>`                                                                       | The rules file, the agents, and the two hooks — the actual policy |
+| Step                                                                                                   | Gives you                                                           |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Copy `plugins/model-tier-policy/skills/model-tier-policy/` to `~/.claude/skills/` or `.claude/skills/` | The `/model-tier-policy` doc and trigger — no enforcement           |
+| Run `install.py --target <repo>`                                                                       | The rules file, the agents, and the three hooks — the actual policy |
 
 Having the skill at user level and the policy installed per repo is the expected setup: the skill copy creates nothing
 under `~/.claude/agents/`, `~/.claude/hooks/`, `~/.claude/rules/`, or `~/.claude/settings.json`, so there is exactly one
@@ -537,32 +539,32 @@ policy.
 
 The installer is idempotent and reports what it changed. It writes:
 
-| File                                                   | Role                                                                                                                                                                        |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.claude/rules/model-tier-policy.md`                   | Always-loaded rules — in context every session, survives compaction                                                                                                         |
-| `.claude/rules/build-discipline/worktree-builds.md`    | Seeded, then yours — builds in worktrees beside development, pushes gated on green                                                                                          |
-| `.claude/rules/coordination/coordination-artifacts.md` | Seeded, then yours — plan/tracker/addendum discipline, the steward, consolidation                                                                                           |
-| `.claude/rules/coordination/state-discipline.md`       | Seeded, then yours — verify repo state before asserting it; no-op silence; no-ops by construction; subscribe deliberately                                                   |
-| `.claude/rules/coordination/multi-agent-hygiene.md`    | Seeded, then yours — branch namespacing, fetch-before-create, per-agent scratch paths                                                                                       |
-| `.claude/agent-operating-rules.md`                     | Seed template, created only when absent (at `paths.operating_rules`) — yours to fill in                                                                                     |
-| `.claude/agents/executor.md`                           | Opus, full tools — the default worker                                                                                                                                       |
-| `.claude/agents/orchestrator.md`                       | Opus, coordination tools only — tickets, plans, dispatch; never implementation                                                                                              |
-| `.claude/agents/runner.md`                             | Sonnet, full tools — bulk mechanical work                                                                                                                                   |
-| `.claude/agents/scout.md`                              | Opus, read-only — investigation that returns findings, not dumps                                                                                                            |
-| `.claude/agents/architect.md`                          | Fable — decisions and consolidation; reads tickets through the GitHub read set; writes coordination artifacts only, code read-only                                          |
-| `.claude/agents/senior-developer.md`                   | Fable, writes code — for novel or tightly coupled implementation                                                                                                            |
-| `.claude/agents/build-analyst.md`                      | Haiku, read-only — failed-build log triage from a path                                                                                                                      |
-| `.claude/agents/build-runner.md`                       | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged                                                                                              |
-| `.claude/agents/code-reviewer.md`                      | Fable first pass / Opus follow-ups — adversarial review; writes only its findings file                                                                                      |
-| `.claude/agents/devils-advocate.md`                    | Opus, read-only — optional adversarial review of a plan before it is built                                                                                                  |
-| `.claude/agents/git-steward.md`                        | Sonnet — commits/reconciles coordination artifacts, PR and review-thread disposition, branch hygiene; never feature work                                                    |
-| `.claude/hooks/model_tier_guard.py`                    | `PreToolUse` — hard-denies procedural tool calls on the premium tier                                                                                                        |
-| `.claude/hooks/model_tier_context.py`                  | `UserPromptSubmit`/`SessionStart`/`PostCompact`/`PostModelSwitch` — re-injects the policy periodically                                                                      |
-| `.claude/hooks/model_tier_receipt.py`                  | `SubagentStop`/`PostToolUse` — caps a subagent's return to a coordinator at a receipt, filing the rest                                                                      |
-| `.claude/hooks/context/*.md`                           | The reminder fragments the context hook loads: per posture, full and brief, the disabled notice, the pending anchor, the compaction fragment, and the rotating clause lists |
-| `.claude/model-tier-policy.json`                       | Config (see below)                                                                                                                                                          |
-| `.claude/model-tier-policy.version`                    | Provenance stamp: plugin version and source of this install, for drift detection                                                                                            |
-| `.claude/settings.json`                                | Hook wiring, merged into whatever is already there                                                                                                                          |
+| File                                                   | Role                                                                                                                                                                         |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.claude/rules/model-tier-policy.md`                   | Always-loaded rules — in context every session, survives compaction                                                                                                          |
+| `.claude/rules/build-discipline/worktree-builds.md`    | Seeded, then yours — builds in worktrees beside development, pushes gated on green                                                                                           |
+| `.claude/rules/coordination/coordination-artifacts.md` | Seeded, then yours — plan/tracker/addendum discipline, the steward, consolidation                                                                                            |
+| `.claude/rules/coordination/state-discipline.md`       | Seeded, then yours — verify repo state before asserting it; no-op silence; no-ops by construction; subscribe deliberately                                                    |
+| `.claude/rules/coordination/multi-agent-hygiene.md`    | Seeded, then yours — branch namespacing, fetch-before-create, per-agent scratch paths                                                                                        |
+| `.claude/agent-operating-rules.md`                     | Seed template, created only when absent (at `paths.operating_rules`) — yours to fill in                                                                                      |
+| `.claude/agents/executor.md`                           | Opus, full tools — the default worker                                                                                                                                        |
+| `.claude/agents/orchestrator.md`                       | Opus, coordination tools only — tickets, plans, dispatch; never implementation                                                                                               |
+| `.claude/agents/runner.md`                             | Sonnet, full tools — bulk mechanical work                                                                                                                                    |
+| `.claude/agents/scout.md`                              | Opus, read-only — investigation that returns findings, not dumps                                                                                                             |
+| `.claude/agents/architect.md`                          | Fable — decisions and consolidation; reads tickets through the GitHub read set; writes coordination artifacts only, code read-only                                           |
+| `.claude/agents/senior-developer.md`                   | Fable, writes code — for novel or tightly coupled implementation                                                                                                             |
+| `.claude/agents/build-analyst.md`                      | Haiku, read-only — failed-build log triage from a path                                                                                                                       |
+| `.claude/agents/build-runner.md`                       | Sonnet — heavy builds in an isolated worktree, one at a time, timed and logged                                                                                               |
+| `.claude/agents/code-reviewer.md`                      | Fable first pass / Opus follow-ups — adversarial review; writes only its findings file                                                                                       |
+| `.claude/agents/devils-advocate.md`                    | Opus, read-only — optional adversarial review of a plan before it is built                                                                                                   |
+| `.claude/agents/git-steward.md`                        | Sonnet — commits/reconciles coordination artifacts, PR and review-thread disposition, branch hygiene; never feature work                                                     |
+| `.claude/hooks/model_tier_guard.py`                    | `PreToolUse` — hard-denies procedural tool calls on the premium tier                                                                                                         |
+| `.claude/hooks/model_tier_context.py`                  | `UserPromptSubmit`/`SessionStart`/`PostModelSwitch` — re-injects the policy periodically                                                                                     |
+| `.claude/hooks/model_tier_receipt.py`                  | `SubagentStop`/`PostToolUse` — caps a subagent's return to a coordinator at a receipt, filing the rest                                                                       |
+| `.claude/hooks/context/*.md`                           | The reminder fragments the context hook loads: per posture, full and brief, the disabled notice, the pending anchor, the compaction fragments, and the rotating clause lists |
+| `.claude/model-tier-policy.json`                       | Config (see below)                                                                                                                                                           |
+| `.claude/model-tier-policy.version`                    | Provenance stamp: plugin version and source of this install, for drift detection                                                                                             |
+| `.claude/settings.json`                                | Hook wiring, merged into whatever is already there                                                                                                                           |
 
 To install by hand instead, copy the files from `references/` to the paths above and merge
 `references/settings-snippet.json` into `.claude/settings.json`.
@@ -601,16 +603,19 @@ silence.
 Injected context attaches to the turn's user message and stays in the transcript, so it **accumulates** — a full
 reminder every turn would cost ~250 tokens per turn cumulatively, which in a premium session spends exactly the budget
 the policy exists to protect. So the full ~12-line text lands on turn 1 and every `reminder_interval` turns after
-(default 10), with a brief marker in between. `SessionStart`, `PostCompact`, and `PostModelSwitch` always re-anchor with
-the full text and restart the count, so the reminder is at its strongest right after a context loss or a model change.
+(default 10), with a brief marker in between. `SessionStart` and `PostModelSwitch` always re-anchor with the full text
+and restart the count, so the reminder is at its strongest right after a context loss or a model change. `PostCompact`
+is deliberately not a carrier: Claude Code discards its output, so anything rendered there is lost — the compaction
+anchor is `SessionStart` with `source: "compact"`, the documented restore point, and the hook exits silently on
+`PostCompact` should an older `settings.json` still wire it.
 
 The brief marker is never the same twice. It carries the turn number, how far the transcript has grown since the last
 anchor, the reads the guard counted last turn, and one clause of the policy per turn, rotating — a banner that is
 byte-identical every turn stops being parsed and becomes furniture, and a session violated every clause of one while its
-text sat in context (#31). And a compaction gets a fragment of its own, rendered once on `SessionStart` with
-`source: "compact"` (or `PostCompact`, whichever fires first): provenance is what a summary compresses away, so the
-first turn after a compaction is told that every remembered actor, approval, and precedent is unverified — before it is
-told anything else.
+text sat in context (#31). And a compaction gets a fragment of its own, rendered on `SessionStart` with
+`source: "compact"`: provenance is what a summary compresses away, so the first turn after a compaction is told that
+every remembered actor, approval, and precedent is unverified — before it is told anything else. Workers get a short
+form; coordinators get the ledger and the steward.
 
 A fresh session's transcript has no assistant entry at `SessionStart` or on its first prompt, so the model — and with it
 the posture — is unknown there. The hook injects a posture-neutral `pending` anchor rather than nothing (the first turn
@@ -720,8 +725,18 @@ the guard denies merge and auto-merge — `merge_pull_request`, `enable_pr_auto_
 commands that merge a PR or push to the default branch — to **every caller, subagents included**, on every posture,
 checked before the subagent exemption. The denial names the policy, not a tier, and says what done looks like: green,
 mergeable, marked ready, recorded in the tracker; the owner merges. A repo whose sessions may merge sets
-`"authorization": {"merge_authority": "session"}`; the tool and command patterns are configurable under the same key.
-Only `MODEL_TIER_POLICY=off` and `"enabled": false` suspend it.
+`"authorization": {"merge_authority": "session"}`; the tool and command patterns are configurable under the same key,
+and `protected_branches` (default `main`, `master`) names the branches the push patterns and the branch-writing MCP
+tools (`push_files`, `create_or_update_file`, `delete_file`) are denied against. Only `MODEL_TIER_POLICY=off` and
+`"enabled": false` suspend it.
+
+The command patterns are a **tripwire over the ordinary spellings, not a boundary**: `git push origin main` in its usual
+forms (a refspec, `HEAD:refs/heads/main`, `+main`, quoted, with `-c`/`-C` options), `gh pr merge`, a mutating `gh api`
+call against a merge endpoint, and the GraphQL merge mutations. A shell can always be made to say something a regex does
+not cover — a bare `git push` on a branch that tracks the default branch, a remote whose default branch has another
+name, an alias — and the bare GET `gh api …/pulls/N/merge` ("is it merged?") is a reconciliation read and stays allowed.
+The boundary that holds regardless is GitHub's own: branch protection on the default branch, with no bypass for the
+account the session runs as.
 
 ---
 
@@ -749,7 +764,7 @@ disappears.
 | `orchestrator_investigation_denied` | (see `DEFAULTS` in `hooks/model_tier_guard.py`)                                                                                                                                                                                                       | Regexes for tools the orchestrator posture never gets — search, fetch, and the GitHub content tools                                                                                                                                                                                                                                                                                                                                                 |
 | `orchestrator_state_reads`          | (see `DEFAULTS` in `hooks/model_tier_guard.py`)                                                                                                                                                                                                       | Regexes for the GitHub reads that return state rather than content — allowed on the orchestrator posture, budgeted                                                                                                                                                                                                                                                                                                                                  |
 | `return_cap_chars`                  | `1500`                                                                                                                                                                                                                                                | The receipt hook's cap on a subagent's return to a coordinating session; `0` disables it                                                                                                                                                                                                                                                                                                                                                            |
-| `authorization`                     | `merge_authority: "owner"`, plus `merge_tools` and `merge_commands` patterns                                                                                                                                                                          | Who may merge. `owner` denies merge and auto-merge to every agent in the session, subagents included; `session` allows it. Project policy, read from this file and never from what a session remembers                                                                                                                                                                                                                                              |
+| `authorization`                     | `merge_authority: "owner"`, `protected_branches: ["main", "master"]`, plus `merge_tools`, `branch_write_tools`, and `merge_commands` patterns                                                                                                         | Who may merge. `owner` denies merge and auto-merge — and writes to a protected branch — to every agent in the session, subagents included; `session` allows it. Project policy, read from this file and never from what a session remembers; a tripwire over ordinary spellings, with branch protection as the boundary                                                                                                                             |
 | `reminder_interval`                 | `10`                                                                                                                                                                                                                                                  | Turns between full policy re-injections; `1` sends it every turn                                                                                                                                                                                                                                                                                                                                                                                    |
 | `orchestrator_mode`                 | `false`                                                                                                                                                                                                                                               | Treat non-premium main-loop sessions as the orchestrator (see Topologies)                                                                                                                                                                                                                                                                                                                                                                           |
 | `bar_command`                       | `null`                                                                                                                                                                                                                                                | Repo-supplied verification command `build-runner` runs instead of composing one; its verdict line is authoritative                                                                                                                                                                                                                                                                                                                                  |
@@ -770,7 +785,7 @@ disappears.
 
 The policy is a budget guardrail, not a safety control — the user can always suspend it:
 
-- `MODEL_TIER_POLICY=off` in the environment disables both hooks for that session
+- `MODEL_TIER_POLICY=off` in the environment disables all three hooks for that session
 - `"enabled": false` in `.claude/model-tier-policy.json` disables it for the repo
 - Widen `bash_allowed` / `write_allowed` for a specific recurring need
 

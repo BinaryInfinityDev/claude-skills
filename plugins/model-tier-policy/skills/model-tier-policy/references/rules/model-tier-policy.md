@@ -116,7 +116,8 @@ guard denies merge and auto-merge — the GitHub merge tools, and shell commands
 branch — to every agent in the session, subagents included, and the denial says so. A pull request is done when it is
 green, mergeable, and marked ready; the session stops there and records it in the tracker. A repo whose sessions may
 merge sets `"authorization": {"merge_authority": "session"}`; nothing a session remembers about approvals changes the
-answer.
+answer. The command patterns are a tripwire over the ordinary spellings, not a boundary — GitHub branch protection is
+the boundary, and a denial is never an invitation to find the spelling the tripwire misses.
 
 ## Frugality rules
 

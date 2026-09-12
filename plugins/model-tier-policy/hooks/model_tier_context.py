@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Re-injects the model tier policy into context on a schedule.
 
-Wired to UserPromptSubmit (per turn), SessionStart (launch, resume, and post-compact restarts), PostCompact, and
+Wired to UserPromptSubmit (per turn), SessionStart (launch, resume, and the restart after a compaction), and
 PostModelSwitch. The always-loaded rules file can drift far up the context window in a long session; this keeps the
-policy in recent context, which is what makes forgetting structurally impossible.
+policy in recent context, which is what makes forgetting structurally impossible. PostCompact is deliberately not a
+carrier: Claude Code discards its output, so a fragment rendered there is a fragment lost — the compaction anchor is
+SessionStart with `source: "compact"`, the documented restore point.
 
 Injected context is attached to the turn's user message and stays in the transcript, so a full reminder on every turn
 accumulates — in a premium-tier session it spends exactly the budget it exists to protect. So the full text lands on
 turn 1 and every `reminder_interval` turns after (default 10), and a brief marker carries the turns in between. The
-anchor events — SessionStart, PostCompact, PostModelSwitch — always re-anchor with the full text.
+anchor events — SessionStart, PostModelSwitch — always re-anchor with the full text.
 
 A banner that is byte-identical every turn stops being parsed: it becomes furniture, and a session violated every
 clause of one while its text sat in context (#31). So the brief marker varies — it carries the turn number, how far the
@@ -48,12 +50,11 @@ try:
 except Exception:  # pragma: no cover - guard missing means policy is not installed
     sys.exit(0)
 
-ANCHOR_EVENTS = ("SessionStart", "PostCompact", "SessionResume", "PostModelSwitch")
+ANCHOR_EVENTS = ("SessionStart", "SessionResume", "PostModelSwitch")
+# Events whose output Claude Code discards: nothing is rendered and no state is touched, whatever wired them.
+SILENT_EVENTS = ("PostCompact", "PreCompact")
 # How close together two firings of the same event must be to count as one event handled by two installed copies.
 DEDUPE_WINDOW_SECONDS = 10
-# SessionStart (source: compact) and PostCompact both fire for one compaction; the first renders the compaction
-# fragment, the other inside this window renders only the posture anchor.
-COMPACT_WINDOW_SECONDS = 120
 
 # The reminder text is data, not code: it lives in context/*.md beside this script — inside the plugin when running
 # as a plugin hook, so the wording updates with the plugin and there is no second copy left to drift; beside the
@@ -141,22 +142,6 @@ def turn_number(session_id, anchor, dedupe_key, advance=True):
     return count
 
 
-def compact_pending(session_id):
-    """True for the first of SessionStart(compact) and PostCompact to fire for one compaction.
-
-    Both events fire for the same compaction; the compaction fragment is rendered once, by whichever comes first, and
-    the other renders only the posture anchor.
-    """
-    path = state_path(session_id)
-    state = load_state(path)
-    now = time.time()
-    if now - float(state.get("compact_ts") or 0) < COMPACT_WINDOW_SECONDS:
-        return False
-    state["compact_ts"] = now
-    save_state(path, state)
-    return True
-
-
 def transcript_growth(session_id, transcript_path, anchor):
     """KB the transcript has grown since the last anchor — a legible proxy for how far context has filled.
 
@@ -179,25 +164,46 @@ def transcript_growth(session_id, transcript_path, anchor):
         return 0
 
 
-def reads_last_turn(session_id):
-    """The budgeted reads the guard counted in the last turn it saw — its own counter file, read only.
+def reads_last_turn(session_id, previous_prompt):
+    """The budgeted reads the guard counted in the previous turn — its own counter file, read only.
 
     The reminder fires at the start of a turn, before any read of that turn, so the count it can show is the previous
-    turn's: the invisible budget made legible one turn late, which is still every turn.
+    turn's: the invisible budget made legible one turn late, which is still every turn. The guard's file names the
+    last turn that had a read, so a turn with none reports 0 rather than the stale count before it; a count above the
+    budget is an overrun that was denied, and is shown as such.
     """
     path = os.path.join(tempfile.gettempdir(), "claude-model-tier-%s.json" % re.sub(r"\W", "", session_id)[:64])
     try:
-        return int(json.loads(open(path, encoding="utf-8").read()).get("count", 0))
+        state = json.loads(open(path, encoding="utf-8").read())
+        if previous_prompt and state.get("turn") != previous_prompt:
+            return 0
+        return int(state.get("count", 0))
     except Exception:
         return 0
 
 
-def clause_of_turn(name, turn, values):
-    """One clause of the posture's policy per turn, rotating through context/clauses-<posture>.md.
+def next_clause_index(session_id):
+    """The brief-reminder sequence number for this session — advanced per brief rendered, never per turn.
 
-    The rotation is the point: consecutive brief reminders never read the same, and each clause gets read on its own
-    instead of as the middle of a banner. A clause is a paragraph — lines within it are joined — so a formatter that
-    rewraps prose cannot split one; a paragraph starting with `#` is a comment.
+    Indexing clauses by turn number lets the full-reminder turns swallow the same clause every cycle: with ten clauses
+    and an interval of ten, one clause never appears. Counting briefs instead walks the whole list whatever the
+    interval.
+    """
+    path = state_path(session_id)
+    state = load_state(path)
+    index = int(state.get("clause_seq", 0))
+    state["clause_seq"] = index + 1
+    save_state(path, state)
+    return index
+
+
+def clause_of_turn(name, turn, values):
+    """One clause of the posture's policy per brief, rotating through context/clauses-<posture>.md.
+
+    `turn` is the brief sequence number (see next_clause_index). The rotation is the point: consecutive brief reminders
+    never read the same, and each clause gets read on its own instead of as the middle of a banner. A clause is a
+    paragraph — lines within it are joined — so a formatter that rewraps prose cannot split one; a paragraph starting
+    with `#` is a comment.
     """
     clauses = []
     try:
@@ -211,7 +217,7 @@ def clause_of_turn(name, turn, values):
     if not clauses:
         return "see the full policy."
     try:
-        text = clauses[(max(int(turn), 1) - 1) % len(clauses)]
+        text = clauses[max(int(turn), 0) % len(clauses)]
     except Exception:
         text = clauses[0]
     try:
@@ -235,6 +241,8 @@ def main():
         sys.exit(0)
 
     event = payload.get("hook_event_name", "UserPromptSubmit")
+    if event in SILENT_EVENTS:
+        sys.exit(0)  # output discarded by Claude Code; rendering here would only consume state a real anchor needs
     # SessionStart may carry `model`; PostModelSwitch carries `to_model` (the transcript still names the old one until
     # the new model answers); everything else reads the transcript.
     model = (payload.get("to_model") if event == "PostModelSwitch" else None) or payload.get("model")
@@ -243,7 +251,7 @@ def main():
         model = model.get("id") or model.get("model") or ""
 
     anchor = event in ANCHOR_EVENTS
-    compacted = event == "PostCompact" or (event == "SessionStart" and payload.get("source") == "compact")
+    compacted = event == "SessionStart" and payload.get("source") == "compact"
     try:
         interval = int(cfg.get("reminder_interval", 10))
     except (TypeError, ValueError):
@@ -303,7 +311,7 @@ def main():
             sys.exit(0)  # another installed copy already injected the pending anchor for this event
         transcript_growth(session_key, payload.get("transcript_path"), anchor)
         context = render("pending", values)
-        if compacted and compact_pending(session_key):
+        if compacted:
             context = render("compact", values) + "\n\n" + context
         print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
         sys.exit(0)
@@ -317,14 +325,18 @@ def main():
     name = posture(cfg, model)
     values["turn"] = turn
     values["growth"] = transcript_growth(session_key, payload.get("transcript_path"), anchor)
-    values["reads_last"] = reads_last_turn(session_key)
-    values["clause"] = clause_of_turn(name, turn, values)
+    state = load_state(state_path(session_key))
+    values["reads_last"] = reads_last_turn(session_key, state.get("last_prompt"))
+    state["last_prompt"] = payload.get("prompt_id")
+    save_state(state_path(session_key), state)
+    values["clause"] = clause_of_turn(name, next_clause_index(session_key), values) if not full else ""
     # A disabled policy announces itself on every turn — one line, no brief variant — because a policy that has
     # gone quiet is indistinguishable from one that is working.
     context = render("disabled", values) if name == "disabled" else render(name if full else name + "-brief", values)
     # The compaction fragment comes first, on every posture: what the summary dropped is decided before anything else.
-    if compacted and compact_pending(session_key):
-        context = render("compact", values) + "\n\n" + context
+    # Workers get the short form — the ledger and the steward are a coordinator's.
+    if compacted:
+        context = render("compact" if name in ("premium", "orchestrator", "disabled") else "compact-worker", values) + "\n\n" + context
 
     print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}))
 
@@ -333,4 +345,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
+        if os.environ.get("MODEL_TIER_DEBUG"):  # surface the traceback for the check; still fail open
+            import traceback
+
+            traceback.print_exc()
         sys.exit(0)

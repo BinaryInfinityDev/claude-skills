@@ -67,6 +67,7 @@ HOOK_FILES = [
     ("context/disabled.md", "hooks/context/disabled.md"),
     ("context/pending.md", "hooks/context/pending.md"),
     ("context/compact.md", "hooks/context/compact.md"),
+    ("context/compact-worker.md", "hooks/context/compact-worker.md"),
     ("context/clauses-orchestrator.md", "hooks/context/clauses-orchestrator.md"),
     ("context/clauses-premium.md", "hooks/context/clauses-premium.md"),
 ]
@@ -216,7 +217,11 @@ def install_records(config_dir, newest):
     under `/model-tier-policy/` is a record, reported with the key path it sits at.
     """
     path = os.path.join(config_dir, "plugins", "installed_plugins.json")
-    data = load_json(path)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        data = {}  # absent or corrupt: no records to report, never a "stale" verdict from a parse error
     found = []
 
     def walk(node, trail):
