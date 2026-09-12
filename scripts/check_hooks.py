@@ -244,6 +244,10 @@ for command in ("gh api -XPUT repos/o/r/pulls/5/merge", "gh api repos/o/r/pulls/
                 "git push --force origin main", "git push origin main:main"):
     check("auth tripwire: %r denied" % command, decision(guard(worker, tr_w, "Bash", {"command": command})), "deny")
 check("auth tripwire: the phrase in a quoted string trips it too (accepted, documented)", decision(guard(worker, tr_w, "Bash", {"command": 'echo "git push origin main"'})), "deny")
+check("auth tripwire: lowercase gh api method still trips (gh uppercases it)", decision(guard(worker, tr_w, "Bash", {"command": "gh api -X put repos/o/r/pulls/5/merge"})), "deny")
+extra, tr_extra = make_repo({"authorization": {"merge_commands": ["^never$"]}}, "claude-opus-5")
+check("auth: configured merge_commands add to the shipped pattern, never replace it",
+      (decision(guard(extra, tr_extra, "Bash", {"command": "gh pr merge 5"})), decision(guard(extra, tr_extra, "Bash", {"command": "never"})), decision(guard(extra, tr_extra, "Bash", {"command": "git push origin main"}))), ("deny", "deny", "deny"))
 # The tripwire stays linear: a long command of repeated tokens must not run the hook into its timeout, where a timed-out
 # PreToolUse hook renders no decision at all.
 for label, command in (("gh api", "gh api x " * 4500), ("git push", "git push x " * 3700), ("mixed", "gh api x git push y ; " * 2000)):
@@ -424,7 +428,20 @@ check("receipt: a long brief with a short return is not a long return", run_hook
 post["tool_response"] = {"status": "completed", "content": [{"type": "text", "text": "b" * 200} for _ in range(10)]}
 out = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {}).get("updatedToolOutput")
 kept = "".join(b["text"] for b in out["content"] if isinstance(b, dict)) if isinstance(out, dict) else ""
-check("receipt: ten 200-char blocks are cut cumulatively to the cap, not left whole", isinstance(out, dict) and len(out["content"]) == 8 and kept.startswith("b" * 1500) and "b" * 1501 not in kept and "of 2009 chars" in kept)
+def kept_text(blocks):
+    """The delivered text as the coordinator sees it — blocks joined by a newline, the trailer removed."""
+    texts = [b["text"] for b in blocks if isinstance(b, dict) and isinstance(b.get("text"), str)]
+    if texts and "[model tier policy: return cut to" in texts[-1]:
+        texts[-1] = texts[-1].split("\n\n[model tier policy: return cut to", 1)[0]
+    return "\n".join(texts)
+
+
+check("receipt: ten 200-char blocks are cut cumulatively to exactly the cap as measured (joins counted), not left whole",
+      isinstance(out, dict) and len(out["content"]) == 8 and len(kept_text(out["content"])) == 1500 and "of 2009 chars" in kept)
+post["tool_response"] = {"status": "completed", "content": [{"type": "text", "text": "d" * 150} for _ in range(10)]}
+out = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {}).get("updatedToolOutput")
+check("receipt: blocks whose raw sum fits but whose joined length exceeds the cap are cut, never announced-and-delivered-whole",
+      isinstance(out, dict) and len(kept_text(out["content"])) == 1500 and len(out["content"]) == 10 and "return cut to" in out["content"][-1]["text"])
 post["tool_response"] = [{"type": "text", "text": "c" * 3000} for _ in range(5)]
 out = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {}).get("updatedToolOutput")
 check("receipt: five 3000-char blocks in a bare list -> one cut block, the rest dropped", isinstance(out, list) and len(out) == 1 and out[0]["text"].startswith("c" * 1500) and "c" * 1501 not in out[0]["text"])

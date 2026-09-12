@@ -734,15 +734,15 @@ The shell rules are a **tripwire over the ordinary spellings, not a boundary**: 
 a refspec in its usual forms (`origin main`, `HEAD:refs/heads/main`, `+main`, quoted, with `-c`/`-C` options before
 `push`), `gh pr merge`, a mutating `gh api` call against a merge endpoint, and the GraphQL merge mutations — the git and
 `gh api` rules are built in and read `protected_branches`; `merge_commands` adds patterns. The scan is linear in the
-command's length (one pass per command segment, a bounded window after each `git push`), because a rule that rescans a
-long command from every occurrence can run the hook past its timeout, and a timed-out `PreToolUse` hook renders no
-decision at all. A shell can always be made to say something the rules do not cover — a bare `git push` on a branch that
-tracks the default branch, a remote whose default branch has another name, an alias — and the tripwire is deliberately
-over-broad the other way too: the phrase inside a quoted string or a heredoc (`echo "git push origin main"`) trips it,
-which is accepted because the denial explains itself and parsing shell to avoid it would be worse than the false
-positive. The bare GET `gh api …/pulls/N/merge` ("is it merged?") is a reconciliation read and stays allowed. The
-boundary that holds regardless is GitHub's own: branch protection on the default branch, with no bypass for the account
-the session runs as.
+command's length (one pass per command segment, a 512-character window after each `git push` in which the refspec must
+appear), because a rule that rescans a long command from every occurrence can run the hook past its timeout, and a
+timed-out `PreToolUse` hook renders no decision at all. A shell can always be made to say something the rules do not
+cover — a bare `git push` on a branch that tracks the default branch, a remote whose default branch has another name, an
+alias — and the tripwire is deliberately over-broad the other way too: the phrase inside a quoted string or a heredoc
+(`echo "git push origin main"`) trips it, which is accepted because the denial explains itself and parsing shell to
+avoid it would be worse than the false positive. The bare GET `gh api …/pulls/N/merge` ("is it merged?") is a
+reconciliation read and stays allowed. The boundary that holds regardless is GitHub's own: branch protection on the
+default branch, with no bypass for the account the session runs as.
 
 ---
 

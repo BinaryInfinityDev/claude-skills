@@ -103,17 +103,20 @@ def cut_body(body, cap, path, total):
     if isinstance(body, str):
         return cut(body, cap, path, total)
     if isinstance(body, list):
-        out, used = [], 0
+        # Budgeted the way it is measured: the blocks joined by a newline, so the separator counts one character.
+        out, used, first = [], 0, True
         for block in body:
             if not (isinstance(block, dict) and isinstance(block.get("text"), str)):
                 out.append(block)
                 continue
             text = block["text"]
-            if used + len(text) <= cap:
+            separator = 0 if first else 1
+            first = False
+            if used + separator + len(text) <= cap:
                 out.append(block)
-                used += len(text)
+                used += separator + len(text)
                 continue
-            out.append(dict(block, text=cut(text, max(cap - used, 0), path, total)))
+            out.append(dict(block, text=cut(text, max(cap - used - separator, 0), path, total)))
             return out
         return out
     return None

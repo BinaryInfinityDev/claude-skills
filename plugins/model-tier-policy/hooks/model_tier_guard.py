@@ -62,8 +62,9 @@ DEFAULTS = {
     # included. "owner" (the default) denies merging and auto-merge to the session entirely; "session" lets it.
     # The shell rules are a tripwire over the ordinary spellings, not a boundary — a shell can always be made to say
     # something they do not cover; GitHub branch protection is the boundary. The git-push and gh-api rules are built
-    # in (see merge_command_hit) and read `protected_branches`; `merge_commands` adds patterns, applied per command
-    # segment, with `{branches}` replaced by the protected-branch alternation.
+    # in (see merge_command_hit) and read `protected_branches`; `merge_commands` adds patterns to the shipped one,
+    # applied per command segment, with `{branches}` replaced by the protected-branch alternation. The other lists
+    # replace their defaults — a repo that protects `release` instead of `main` says so by listing it.
     "authorization": {
         "merge_authority": "owner",
         "protected_branches": ["main", "master"],
@@ -554,7 +555,10 @@ def resolved_authorization(cfg):
         for key in ("merge_tools", "merge_commands", "branch_write_tools", "protected_branches"):
             value = user.get(key)
             if isinstance(value, list) and value and all(isinstance(item, str) and item for item in value):
-                auth[key] = value
+                if key == "merge_commands":  # additive, as documented: a repo's patterns never drop the shipped one
+                    auth[key] = list(DEFAULTS["authorization"][key]) + [p for p in value if p not in DEFAULTS["authorization"][key]]
+                else:
+                    auth[key] = value
     branches = "|".join(re.escape(b) for b in auth["protected_branches"])
     auth["merge_commands"] = [p.replace("{branches}", branches) for p in auth["merge_commands"]]
     return auth
@@ -567,7 +571,7 @@ def resolved_authorization(cfg):
 GIT_PUSH_RE = re.compile(r"\bgit(?:\s+-[cC]\s*\S+|\s+--(?:git-dir|work-tree|namespace)=\S+)*\s+push\b")
 REFSPEC_WINDOW = 512
 GH_API_RE = re.compile(r"\bgh\s+api\b")
-GH_MUTATING_RE = re.compile(r"(?:-X|--method)[\s=]*(?:PUT|POST|PATCH)\b|\s-[fF]\s|\s--(?:raw-)?field[\s=]|\s--input[\s=]")
+GH_MUTATING_RE = re.compile(r"(?:-X|--method)[\s=]*(?i:put|post|patch)\b|\s-[fF]\s|\s--(?:raw-)?field[\s=]|\s--input[\s=]")
 GH_MERGE_ENDPOINT_RE = re.compile(r"/merges?(?![\w-])")
 GH_GRAPHQL_MERGE_RE = re.compile(r"\b(?:mergePullRequest|enablePullRequestAutoMerge)\b")
 
