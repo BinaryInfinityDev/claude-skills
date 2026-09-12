@@ -193,19 +193,16 @@ def version_key(version):
 
 
 def cache_complete(directory):
-    """A cached version directory that can serve the policy: both loader hooks and the agent catalog present.
+    """A cached version directory that can serve the policy: every hook script and the agent catalog present.
 
-    Completeness, not existence — a killed upgrade leaves a half-written `<new>/` beside a complete `<old>/`.
+    Completeness, not existence — a killed upgrade leaves a half-written `<new>/` beside a complete `<old>/`, and a
+    copy that predates a hook cannot serve the policy that names it: the receipt hook is as required as the guard.
     """
     try:
         agents = [n for n in os.listdir(os.path.join(directory, "agents")) if n.endswith(".md")]
     except OSError:
         agents = []
-    return (
-        os.path.isfile(os.path.join(directory, "hooks", "model_tier_guard.py"))
-        and os.path.isfile(os.path.join(directory, "hooks", "model_tier_context.py"))
-        and len(agents) >= 10
-    )
+    return all(os.path.isfile(os.path.join(directory, "hooks", script)) for script in HOOK_SCRIPTS) and len(agents) >= 10
 
 
 def install_records(config_dir, newest):
