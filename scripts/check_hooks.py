@@ -53,22 +53,34 @@ def tmp(prefix):
     return tempfile.mkdtemp(prefix=prefix + "-", dir=SCRATCH)
 
 
+def write(path, text, mode="w"):
+    """Write through a context manager: a bare open().write() leaves the close to the garbage collector, and a hook
+    run as a subprocess may read the file before a non-refcounting runtime has flushed it."""
+    with open(path, mode, encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def write_json(path, obj):
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(obj, fh)
+
+
 def make_repo(cfg, model, agents=False):
     root = tmp("repo")
     os.makedirs(os.path.join(root, ".claude", "plans"))
     os.makedirs(os.path.join(root, "src"))
-    json.dump(cfg, open(os.path.join(root, ".claude", "model-tier-policy.json"), "w"))
-    open(os.path.join(root, ".claude", "plans", "p.tracker.md"), "w").write("| m1 |\n" * 300)
-    open(os.path.join(root, ".claude", "plans", "p.plan.md"), "w").write("# plan\n")
-    open(os.path.join(root, ".claude", "agent-operating-rules.md"), "w").write("rules\n")
-    open(os.path.join(root, "src", "main.py"), "w").write("print(1)\n")
+    write_json(os.path.join(root, ".claude", "model-tier-policy.json"), cfg)
+    write(os.path.join(root, ".claude", "plans", "p.tracker.md"), "| m1 |\n" * 300)
+    write(os.path.join(root, ".claude", "plans", "p.plan.md"), "# plan\n")
+    write(os.path.join(root, ".claude", "agent-operating-rules.md"), "rules\n")
+    write(os.path.join(root, "src", "main.py"), "print(1)\n")
     if agents:
         shutil.copytree(os.path.join(PLUGIN, "agents"), os.path.join(root, ".claude", "agents"))
     tr = os.path.join(root, "main.jsonl")
     if model:
-        open(tr, "w").write(json.dumps({"type": "assistant", "message": {"model": model}}) + "\n")
+        write(tr, json.dumps({"type": "assistant", "message": {"model": model}}) + "\n")
     else:
-        open(tr, "w").close()
+        write(tr, "")
     return root, tr
 
 
@@ -314,7 +326,7 @@ pend = context(fresh, tr_f, "SessionStart", sess, source="startup")
 check("reminder: no assistant entry at SessionStart -> pending anchor", "posture pending" in pend and unfilled(pend) == [])
 pend2 = context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p1")
 check("reminder: first prompt still unknown -> pending", "posture pending" in pend2)
-open(tr_f, "w").write(json.dumps({"type": "assistant", "message": {"model": "claude-opus-5"}}) + "\n")
+write(tr_f, json.dumps({"type": "assistant", "message": {"model": "claude-opus-5"}}) + "\n")
 t1 = context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p2")
 check("reminder: first known-model firing is turn 1, the full fragment", "orchestrator session" in t1 and "Rule of the turn" not in t1)
 briefs = [context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p%d" % i) for i in range(3, 12)]
@@ -390,7 +402,7 @@ crash_guard = os.path.join(crash_dir, "hooks", "model_tier_guard.py")
 src = open(crash_guard, encoding="utf-8").read()
 marker = "def glob_anchor(root, tool_input):\n"
 assert marker in src
-open(crash_guard, "w", encoding="utf-8").write(src.replace(marker, marker + "    raise RuntimeError('boom')\n", 1))
+write(crash_guard, src.replace(marker, marker + "    raise RuntimeError('boom')\n", 1))
 before = len(failures)
 r = run_hook(crash_guard, call(orch, tr_o, "Glob", {"pattern": ".claude/plans/*.md"}))
 crashed = len(failures) == before + 1 and "RuntimeError" in failures[-1] and r is None
@@ -411,6 +423,16 @@ check("receipt: the full text is filed under paths.receipts", os.path.isdir(file
 check("receipt: under the cap -> silent", run_hook(RECEIPT, stop(orch, tr_o, "short")), None)
 check("receipt: stop_hook_active -> never a second block", run_hook(RECEIPT, stop(orch, tr_o, LONG, active=True)), None)
 check("receipt: worker posture -> not capped", run_hook(RECEIPT, stop(worker, tr_w, LONG)), None)
+# Two returns filed under one name inside one second — parallel dispatch ends subagents together, and the fallback
+# names (`agent`, `return`) are shared — must both survive: an overwrite would leave one receipt's `details:` path
+# pointing at another agent's text.
+twin = dict(stop(orch, tr_o, LONG + "-first"), session_id="c" + RUN)
+run_hook(RECEIPT, twin)
+run_hook(RECEIPT, dict(twin, last_assistant_message=LONG + "-second"))
+twin_dir = os.path.join(orch, ".claude", "receipts", "c" + RUN)
+twin_texts = [open(os.path.join(twin_dir, f), encoding="utf-8").read() for f in os.listdir(twin_dir)] if os.path.isdir(twin_dir) else []
+check("receipt: two returns filed under one name in one second are both kept, never overwritten",
+      len(twin_texts) == 2 and any(t.endswith(LONG + "-first") for t in twin_texts) and any(t.endswith(LONG + "-second") for t in twin_texts))
 post = {"cwd": orch, "transcript_path": tr_o, "hook_event_name": "PostToolUse", "session_id": "r" + RUN, "tool_name": "Agent",
         "tool_input": {"subagent_type": "executor"}, "tool_response": LONG, "tool_use_id": "toolu_1"}
 r = run_hook(RECEIPT, post)
@@ -476,23 +498,23 @@ check("installer: second run reports keep for every file line", bool(file_lines)
 check("installer: second run merges settings.json with nothing removed", any("settings.json" in line and "0 hook entries removed" in line for line in out2.splitlines()))
 check("installer: unchanged stamp left alone", open(os.path.join(empty, ".claude", "model-tier-policy.version")).read() == stamp)
 h1 = subprocess.run([sys.executable, cached_install, "--print-hash"], capture_output=True, text=True).stdout.split()[-1]
-os.makedirs(os.path.join(cached, ".in_use")); open(os.path.join(cached, ".in_use", "4242"), "w").write("")
+os.makedirs(os.path.join(cached, ".in_use")); write(os.path.join(cached, ".in_use", "4242"), "")
 h2 = subprocess.run([sys.executable, cached_install, "--print-hash"], capture_output=True, text=True).stdout.split()[-1]
 check("installer: --print-hash identical with and without .in_use/<pid>", h1, h2)
 rule = os.path.join(empty, ".claude", "rules", "coordination", "state-discipline.md")
-open(rule, "a").write("\nlocal edit\n")
+write(rule, "\nlocal edit\n", mode="a")
 out3 = installer(empty, script=cached_install).stdout
 check("installer: an edited seeded rule reports drift and writes .new", "drift" in out3 and os.path.exists(rule + ".new"))
-open(rule, "w").write(open(os.path.join(REFS, "rules", "coordination", "state-discipline.md")).read())
+write(rule, open(os.path.join(REFS, "rules", "coordination", "state-discipline.md")).read())
 installer(empty, script=cached_install)
 check("installer: .new removed once the copies match again", not os.path.exists(rule + ".new"))
-json.dump({"orchestrator_mode": False, "read_budget": 8, "write_allowed": ["**/*.plan.md"]}, open(cfg_path, "w"))
+write_json(cfg_path, {"orchestrator_mode": False, "read_budget": 8, "write_allowed": ["**/*.plan.md"]})
 out4 = installer(empty, "--dry-run", script=cached_install).stdout
 check("installer: a key restating a default is noted", "restates the shipped default" in out4)
 check("installer: a list member missing from DEFAULTS is noted", "member" in out4 and "write_allowed" in out4)
 full = tmp("full")
 os.makedirs(os.path.join(full, ".claude"))
-json.dump({"models": {"executor": "sonnet"}}, open(os.path.join(full, ".claude", "model-tier-policy.json"), "w"))
+write_json(os.path.join(full, ".claude", "model-tier-policy.json"), {"models": {"executor": "sonnet"}})
 installer(full, "--full")
 exe = os.path.join(full, ".claude", "agents", "executor.md")
 check("installer --full: configured model baked into the agent copy", os.path.exists(exe) and "\nmodel: sonnet\n" in open(exe).read())
@@ -507,10 +529,21 @@ settings = json.load(open(os.path.join(full, ".claude", "settings.json")))
 check("installer: settings wire SubagentStop, PostToolUse, and PostModelSwitch", all(k in settings.get("hooks", {}) for k in ("SubagentStop", "PostToolUse", "PostModelSwitch")))
 env_cache = {"CLAUDE_CONFIG_DIR": cfg_dir}
 check("installer --cache-status: current when the stamp matches the newest complete copy", installer(empty, "--cache-status", env_extra=env_cache).returncode, 0)
-open(os.path.join(empty, ".claude", "model-tier-policy.version"), "w").write("model-tier-policy 99.0.0\ncontent: abc\nsource: claude-skills marketplace\n")
+write(os.path.join(empty, ".claude", "model-tier-policy.version"), "model-tier-policy 99.0.0\ncontent: abc\nsource: claude-skills marketplace\n")
 check("installer --cache-status: stale when the stamp is ahead of every cached copy", installer(empty, "--cache-status", env_extra=env_cache).returncode, 1)
 check("installer --cache-status: missing without a cache", installer(empty, "--cache-status", env_extra={"CLAUDE_CONFIG_DIR": tmp("nocache")}).returncode, 2)
 check("installer --cache-status: unknown without a stamp", installer(tmp("nostamp"), "--cache-status", env_extra=env_cache).returncode, 3)
+# A copy that predates a hook cannot serve the policy that names it: a half-written newer version directory with
+# the receipt hook missing is INCOMPLETE and never "ahead"; with every hook script in place the same copy counts.
+ahead = os.path.join(cache, "99.0.0")
+shutil.copytree(cached, ahead, ignore=shutil.ignore_patterns("__pycache__", ".in_use"))
+os.remove(os.path.join(ahead, "hooks", "model_tier_receipt.py"))
+write(os.path.join(empty, ".claude", "model-tier-policy.version"), "model-tier-policy 99.0.0\nsource: claude-skills marketplace\n")
+r = installer(empty, "--cache-status", env_extra=env_cache)
+check("installer --cache-status: a newer copy missing the receipt hook is INCOMPLETE and the status stays stale",
+      r.returncode == 1 and "INCOMPLETE" in r.stdout and "newest complete: %s" % version in r.stdout)
+shutil.copy2(os.path.join(cached, "hooks", "model_tier_receipt.py"), os.path.join(ahead, "hooks", "model_tier_receipt.py"))
+check("installer --cache-status: the same copy with every hook script is complete and current", installer(empty, "--cache-status", env_extra=env_cache).returncode, 0)
 
 # ------------------------------------------------------------------------------------- the remote session-start snippet
 # The snippet in SKILL.md is what a consuming repo copies verbatim, so it is exercised here with a shim `claude` on PATH
@@ -521,7 +554,7 @@ snippet = skill_text[snip_start:skill_text.index("```", snip_start)]
 lab = tmp("snippet")
 shim_dir = os.path.join(lab, "bin")
 os.makedirs(shim_dir)
-open(os.path.join(shim_dir, "claude"), "w").write(
+write(os.path.join(shim_dir, "claude"),
     "#!/usr/bin/env bash\n"
     "echo \"$*\" >>\"$SHIM_LOG\"\n"
     "case \"$1 $2\" in\n"
@@ -531,20 +564,19 @@ open(os.path.join(shim_dir, "claude"), "w").write(
     "exit 0\n")
 os.chmod(os.path.join(shim_dir, "claude"), 0o755)
 script = os.path.join(lab, "ensure.sh")
-open(script, "w").write("set -o pipefail\n" + snippet)
+write(script, "set -o pipefail\n" + snippet)
 
 
 def snippet_run(label, stamp_version, listing, update_rc=0, with_cache=True):
     home = tmp("snip-home-" + label)
     repo = tmp("snip-repo-" + label)
     os.makedirs(os.path.join(repo, ".claude"))
-    json.dump({"extraKnownMarketplaces": {"claude-skills": {"source": {"source": "github", "repo": "BinaryInfinityDev/claude-skills"}}}},
-              open(os.path.join(repo, ".claude", "settings.json"), "w"))
+    write_json(os.path.join(repo, ".claude", "settings.json"), {"extraKnownMarketplaces": {"claude-skills": {"source": {"source": "github", "repo": "BinaryInfinityDev/claude-skills"}}}})
     if with_cache:
         shutil.copytree(cached, os.path.join(home, ".claude", "plugins", "cache", "claude-skills", "model-tier-policy", version),
                         ignore=shutil.ignore_patterns("__pycache__", ".in_use"))
     if stamp_version:
-        open(os.path.join(repo, ".claude", "model-tier-policy.version"), "w").write(
+        write(os.path.join(repo, ".claude", "model-tier-policy.version"),
             "model-tier-policy %s\ncontent: %s\nsource: claude-skills marketplace\n" % (stamp_version, h1))
     log = os.path.join(lab, "shim-%s.log" % label)
     env = dict(os.environ, HOME=home, PATH=shim_dir + os.pathsep + os.environ.get("PATH", ""), SHIM_LOG=log,

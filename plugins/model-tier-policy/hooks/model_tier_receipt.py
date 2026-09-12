@@ -42,7 +42,12 @@ def coordinating(cfg, payload):
 
 
 def file_receipt(root, cfg, payload, name, text):
-    """Write the full return under the receipts directory; returns the repo-relative path, or None."""
+    """Write the full return under the receipts directory; returns the repo-relative path, or None.
+
+    The file is created exclusively, never truncated: parallel dispatch ends subagents in the same second, the
+    fallback names (`agent`, `return`) are shared, and an overwrite would leave an earlier receipt's `details:` path
+    pointing at another agent's text. The name carries a microsecond UTC stamp and, on a collision, a numeric suffix.
+    """
     base = (resolved_paths(cfg).get("receipts") or "").rstrip("/")
     if not base:
         return None
@@ -51,13 +56,23 @@ def file_receipt(root, cfg, payload, name, text):
     directory = os.path.join(root, base, session)
     try:
         os.makedirs(directory, exist_ok=True)
-        path = os.path.join(directory, "%s-%d.md" % (name, int(time.time())))
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(
-                "# Filed return — %s\n\nagent: %s\nfiled: %s\nchars: %d\n\n---\n\n"
-                % (name, payload.get("agent_type") or "unknown", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), len(text))
-            )
-            fh.write(text)
+        now = time.time()
+        stamp = "%s.%06d" % (time.strftime("%Y%m%dT%H%M%S", time.gmtime(now)), int((now - int(now)) * 1000000))
+        for attempt in range(1000):
+            path = os.path.join(directory, "%s-%s%s.md" % (name, stamp, "-%d" % attempt if attempt else ""))
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                continue
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "# Filed return — %s\n\nagent: %s\nfiled: %s\nchars: %d\n\n---\n\n"
+                    % (name, payload.get("agent_type") or "unknown", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), len(text))
+                )
+                fh.write(text)
+            break
+        else:
+            return None
     except Exception:
         return None
     return os.path.relpath(path, root)
