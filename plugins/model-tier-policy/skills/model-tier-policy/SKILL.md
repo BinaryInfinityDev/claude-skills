@@ -640,11 +640,13 @@ than a retry loop.
 
 **Layer 3b — the receipt hook.** `model_tier_receipt.py` runs on `SubagentStop` and on `PostToolUse` for the `Agent`
 tool. When the parent session is a coordinator and a subagent's final message exceeds `return_cap_chars`, the full text
-is filed under `paths.receipts` and the stop is blocked once with the instruction to return the seven-line receipt
-naming that file; `stop_hook_active` guards the loop, so a second stop is never blocked. The `PostToolUse` backstop
-files a return that still exceeds the cap, cuts the tool output down where its shape allows, and adds one line saying
-where the full text is. This is the return cap made mechanical: "return a concise result" in a brief is advisory, and an
-executor that returns a 400-line diff has spent the coordinator's context on text it did not need.
+is filed under `paths.receipts` — contained in the repo the way the guard contains writes; a location that escapes it
+(absolute, `..`, or a symlink out) files nothing, and the block says so — and the stop is blocked once with the
+instruction to return the seven-line receipt naming that file; `stop_hook_active` guards the loop, so a second stop is
+never blocked. The `PostToolUse` backstop files a return that still exceeds the cap, cuts the tool output down where its
+shape allows, and adds one line saying where the full text is. This is the return cap made mechanical: "return a concise
+result" in a brief is advisory, and an executor that returns a 400-line diff has spent the coordinator's context on text
+it did not need.
 
 ### What the guard denies on the premium tier
 

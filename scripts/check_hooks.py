@@ -443,6 +443,17 @@ check("receipt: two returns filed under one name and one stamp are both kept —
       sorted(twin_texts) == ["agent-1-20231114T221320.250000-1.md", "agent-1-20231114T221320.250000.md"]
       and twin_texts["agent-1-20231114T221320.250000.md"].endswith(LONG + "-first")
       and twin_texts["agent-1-20231114T221320.250000-1.md"].endswith(LONG + "-second"))
+# A receipts location that escapes the repo — through `..` or as an absolute path — is not a repo-relative handle:
+# nothing is written there, and the block says the return could not be filed.
+esc, tr_e = make_repo({"orchestrator_mode": True, "paths": {"receipts": "../escaped-receipts"}}, "claude-opus-5")
+r = run_hook(RECEIPT, stop(esc, tr_e, LONG))
+check("receipt: a `..` receipts path files nothing and the block says so",
+      "could not be filed" in (r or {}).get("reason", "") and not os.path.exists(os.path.join(SCRATCH, "escaped-receipts")))
+abs_receipts = tmp("abs-receipts")
+esc2, tr_e2 = make_repo({"orchestrator_mode": True, "paths": {"receipts": abs_receipts}}, "claude-opus-5")
+r = run_hook(RECEIPT, stop(esc2, tr_e2, LONG))
+check("receipt: an absolute receipts path files nothing and the block says so",
+      "could not be filed" in (r or {}).get("reason", "") and os.listdir(abs_receipts) == [])
 post = {"cwd": orch, "transcript_path": tr_o, "hook_event_name": "PostToolUse", "session_id": "r" + RUN, "tool_name": "Agent",
         "tool_input": {"subagent_type": "executor"}, "tool_response": LONG, "tool_use_id": "toolu_1"}
 r = run_hook(RECEIPT, post)

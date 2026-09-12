@@ -47,13 +47,24 @@ def file_receipt(root, cfg, payload, name, text):
     The file is created exclusively, never truncated: parallel dispatch ends subagents in the same second, the
     fallback names (`agent`, `return`) are shared, and an overwrite would leave an earlier receipt's `details:` path
     pointing at another agent's text. The name carries a microsecond UTC stamp and, on a collision, a numeric suffix.
+
+    The location is contained in the repo the way the guard contains writes: a `paths.receipts` that escapes it —
+    absolute, through `..`, or through a symlink out — files nothing, and the block says the return could not be
+    filed. The path handed back is therefore always repo-relative and never climbs.
     """
     base = (resolved_paths(cfg).get("receipts") or "").rstrip("/")
     if not base:
         return None
     session = re.sub(r"[^A-Za-z0-9._-]", "", str(payload.get("session_id") or "session"))[:64] or "session"
     name = re.sub(r"[^A-Za-z0-9._-]", "", str(name))[:64] or "return"
-    directory = os.path.join(root, base, session)
+    try:
+        root_abs = os.path.realpath(root)
+        directory = os.path.realpath(os.path.join(root, base, session))
+        relative = os.path.relpath(directory, root_abs)
+    except (ValueError, OSError):
+        return None
+    if os.path.isabs(relative) or relative == os.pardir or relative.startswith(os.pardir + os.sep):
+        return None  # outside the project root: not a repo-relative handle
     try:
         os.makedirs(directory, exist_ok=True)
         now = time.time()
@@ -80,7 +91,7 @@ def file_receipt(root, cfg, payload, name, text):
             return None
     except Exception:
         return None
-    return os.path.relpath(path, root)
+    return os.path.relpath(path, root_abs)
 
 
 # The keys of a dict response that carry the subagent's text, in the order tried. The Agent tool's response is a dict
