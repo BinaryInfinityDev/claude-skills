@@ -56,6 +56,7 @@ OPERATING_RULES_TEMPLATE = "agent-operating-rules.md"
 HOOK_FILES = [
     ("model_tier_guard.py", "hooks/model_tier_guard.py"),
     ("model_tier_context.py", "hooks/model_tier_context.py"),
+    ("model_tier_receipt.py", "hooks/model_tier_receipt.py"),
     # The reminder hook is a loader; these fragments are the text it injects, resolved beside the script.
     ("context/premium.md", "hooks/context/premium.md"),
     ("context/premium-brief.md", "hooks/context/premium-brief.md"),
@@ -65,7 +66,13 @@ HOOK_FILES = [
     ("context/worker-brief.md", "hooks/context/worker-brief.md"),
     ("context/disabled.md", "hooks/context/disabled.md"),
     ("context/pending.md", "hooks/context/pending.md"),
+    ("context/compact.md", "hooks/context/compact.md"),
+    ("context/compact-worker.md", "hooks/context/compact-worker.md"),
+    ("context/clauses-orchestrator.md", "hooks/context/clauses-orchestrator.md"),
+    ("context/clauses-premium.md", "hooks/context/clauses-premium.md"),
 ]
+# The scripts whose presence in a settings.json hook command marks the entry as this policy's.
+HOOK_SCRIPTS = ("model_tier_guard.py", "model_tier_context.py", "model_tier_receipt.py")
 # (source relative to AGENTS_SRC, destination relative to .claude/)
 AGENT_FILES = [
     ("build-analyst.md", "agents/build-analyst.md"),
@@ -99,7 +106,7 @@ def plugin_version():
         return "unversioned"
 
 
-def content_hash():
+def content_hash(root=None):
     """A short hash over the plugin's tracked content, so drift is detectable when the version number is not moving.
 
     A branch-pinned install makes every push a de facto release, but the version in the manifest only changes when
@@ -110,12 +117,13 @@ def content_hash():
     """
     import hashlib
 
+    root = root or PLUGIN_ROOT
     digest = hashlib.sha256()
     entries = []
     # The walk must stay lazy for the dirs mutation to prune traversal — sorted(os.walk(...)) would materialize
     # every directory before the loop runs, turning the prune into dead code. Determinism comes from sorting the
     # collected paths instead.
-    for base, dirs, files in os.walk(PLUGIN_ROOT):
+    for base, dirs, files in os.walk(root):
         # Prune what is not plugin content: bytecode caches, and the hidden directories the harness writes into an
         # installed cache — Claude Code marks a plugin in use with `.in_use/<pid>`, which differs per session. Hashing
         # that made the stamp's hash unreproducible against any live cache, so every comparison reported drift. The
@@ -125,7 +133,7 @@ def content_hash():
             if not name.endswith(".pyc"):
                 entries.append(os.path.join(base, name))
     for path in sorted(entries):
-        rel = os.path.relpath(path, PLUGIN_ROOT)
+        rel = os.path.relpath(path, root)
         digest.update(rel.encode("utf-8"))
         digest.update(b"\0")
         try:
@@ -155,6 +163,138 @@ def stamp_source():
 # Pre-rename paths (relative to .claude/) still found in repos installed before the policy was named consistently.
 LEGACY_CONFIG = "model-tiers.json"
 LEGACY_RULE = "rules/model-tiers.md"
+
+
+def read_stamp(path):
+    """The stamp's identity lines — version, content hash, source — or None when there is no readable stamp."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except Exception:
+        return None
+    stamp = {"version": None, "content": None, "source": None}
+    for line in lines[:4]:
+        if line.startswith("model-tier-policy "):
+            stamp["version"] = line.split(None, 1)[1].strip()
+        elif line.startswith("content:"):
+            stamp["content"] = line.split(":", 1)[1].strip()
+        elif line.startswith("source:"):
+            stamp["source"] = line.split(":", 1)[1].strip()
+    return stamp if stamp["version"] else None
+
+
+def version_key(version):
+    """Dotted versions compare numerically per segment; anything non-numeric sorts as 0 in its slot."""
+    key = []
+    for part in str(version or "").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        key.append(int(digits) if digits else 0)
+    return tuple(key)
+
+
+def cache_complete(directory):
+    """A cached version directory that can serve the policy: both loader hooks and the agent catalog present.
+
+    Completeness, not existence — a killed upgrade leaves a half-written `<new>/` beside a complete `<old>/`.
+    """
+    try:
+        agents = [n for n in os.listdir(os.path.join(directory, "agents")) if n.endswith(".md")]
+    except OSError:
+        agents = []
+    return (
+        os.path.isfile(os.path.join(directory, "hooks", "model_tier_guard.py"))
+        and os.path.isfile(os.path.join(directory, "hooks", "model_tier_context.py"))
+        and len(agents) >= 10
+    )
+
+
+def install_records(config_dir, newest):
+    """Every install record that points at a cached model-tier-policy version, with whether it lags the newest.
+
+    Claude Code keeps one record per scope in installed_plugins.json, and updating one scope does not move another
+    (#31): a cache can hold the current version while a project-scope record still pins the old one. The file's
+    layout is not this installer's to know, so the walk is structural — any string value naming a version directory
+    under `/model-tier-policy/` is a record, reported with the key path it sits at.
+    """
+    path = os.path.join(config_dir, "plugins", "installed_plugins.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        data = {}  # absent or corrupt: no records to report, never a "stale" verdict from a parse error
+    found = []
+
+    def walk(node, trail):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, trail + [str(key)])
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, trail + [str(index)])
+        elif isinstance(node, str) and "/model-tier-policy/" in node.replace(os.sep, "/"):
+            after = node.replace(os.sep, "/").split("/model-tier-policy/", 1)[1]
+            version = after.split("/", 1)[0]
+            if version:
+                found.append((".".join(trail), version))
+
+    walk(data, [])
+    return [(where, version, bool(newest) and version_key(version) < version_key(newest)) for where, version in found]
+
+
+def cache_status(target):
+    """Compare the repo's stamp against the plugin cache and report what a session-start hook needs to decide.
+
+    Exit codes: 0 current (a complete cached copy at the stamp's version with the stamp's content, or newer);
+    1 stale (the newest complete copy is older than the stamp, or the same version with different content — the
+    branch-pinned failure); 2 missing (no complete copy at all); 3 unknown (no readable stamp to compare against —
+    the cache state is still printed). Completeness is what is checked, never mere presence, and an install record
+    that lags the newest complete copy is named: `claude plugin install` reports "already installed" over a record
+    and cannot upgrade, `claude plugin update` can, and it moves one scope at a time.
+    """
+    stamp = read_stamp(os.path.join(target, ".claude", STAMP))
+    source = (stamp or {}).get("source") or ""
+    marketplace = source.split()[0] if source.endswith(" marketplace") else "claude-skills"
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    cache = os.path.join(config_dir, "plugins", "cache", marketplace, "model-tier-policy")
+
+    if stamp:
+        print("stamp: %s content %s (%s)" % (stamp["version"], stamp["content"] or "-", stamp["source"] or "-"))
+    else:
+        print("stamp: none readable at %s" % os.path.join(target, ".claude", STAMP))
+    print("cache: %s" % cache)
+    entries = []
+    try:
+        names = sorted(os.listdir(cache), key=version_key)
+    except OSError:
+        names = []
+    for name in names:
+        directory = os.path.join(cache, name)
+        if not os.path.isdir(directory):
+            continue
+        complete = cache_complete(directory)
+        digest = content_hash(directory) if complete else None
+        entries.append((name, complete, digest))
+        print("  %-10s %-10s %s" % (name, "complete" if complete else "INCOMPLETE", ("content %s" % digest) if digest else ""))
+    complete_entries = [e for e in entries if e[1]]
+    newest = max(complete_entries, key=lambda e: version_key(e[0])) if complete_entries else None
+    print("newest complete: %s" % (newest[0] if newest else "none"))
+    for where, version, lagging in install_records(config_dir, newest[0] if newest else None):
+        print("record %s: %s%s" % (where, version, " — BEHIND the newest complete copy" if lagging else ""))
+
+    if stamp is None:
+        status, code = "unknown (no stamp to compare against)", 3
+    elif newest is None:
+        status, code = "missing (no complete cached copy)", 2
+    elif version_key(newest[0]) > version_key(stamp["version"]):
+        status, code = "current (cache ahead of the stamp — re-run the installer to move the stamp)", 0
+    elif version_key(newest[0]) < version_key(stamp["version"]):
+        status, code = "stale (newest complete copy %s is older than the stamp)" % newest[0], 1
+    elif stamp["content"] and newest[2] != stamp["content"]:
+        status, code = "stale (same version, different content — a branch-pinned cache behind the stamp)", 1
+    else:
+        status, code = "current", 0
+    print("status: %s" % status)
+    return code
 
 
 def same_content(a, b):
@@ -202,7 +342,7 @@ def strip_policy_hooks(settings):
         kept = []
         for entry in entries:
             commands = hook_command(entry if isinstance(entry, dict) else {})
-            if any("model_tier_guard.py" in c or "model_tier_context.py" in c for c in commands):
+            if any(script in c for c in commands for script in HOOK_SCRIPTS):
                 removed += 1
             else:
                 kept.append(entry)
@@ -216,14 +356,14 @@ def strip_policy_hooks(settings):
 
 
 def policy_installed(root):
-    """True when a settings.json under root already wires up either of our hooks."""
+    """True when a settings.json under root already wires up any of our hooks."""
     settings = load_json(os.path.join(root, ".claude", "settings.json"))
     for entries in (settings.get("hooks") or {}).values():
         if not isinstance(entries, list):
             continue
         for entry in entries:
             for command in hook_command(entry if isinstance(entry, dict) else {}):
-                if "model_tier_guard.py" in command or "model_tier_context.py" in command:
+                if any(script in command for script in HOOK_SCRIPTS):
                     return True
     return False
 
@@ -252,11 +392,20 @@ def main():
         "copies from an earlier full install — the default when running from an installed plugin",
     )
     parser.add_argument("--full", action="store_true", help="copy hooks and agents even when running from a plugin")
+    parser.add_argument(
+        "--cache-status",
+        action="store_true",
+        help="compare the target's stamp against every cached plugin version and the install records, then exit "
+        "0 current / 1 stale / 2 missing / 3 no stamp — what a session-start hook gates on",
+    )
     args = parser.parse_args()
 
     if args.print_hash:
         print("model-tier-policy %s content %s" % (plugin_version(), content_hash()))
         return
+
+    if args.cache_status:
+        sys.exit(cache_status(os.path.abspath(args.target)))
 
     # Local copies do not defer to the plugin: a project-scope agent file shadows the plugin's on a name collision,
     # and a doubled reminder hook injects whichever copy fires first. So when this installer runs from inside an

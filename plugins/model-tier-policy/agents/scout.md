@@ -35,6 +35,10 @@ boundary and stop. Do not hunt for a workaround or a token.
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 **15 lines or fewer**, or the cap the brief sets. The answer, then the evidence:
 
 - The direct answer to the question asked, first

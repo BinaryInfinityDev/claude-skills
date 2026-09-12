@@ -33,7 +33,10 @@ arrives in the brief or lives in the tree.
   edit what is already there, and never use the Write tool on the addendum (it truncates). A correction is a new entry
   naming what it supersedes. Then commit.
 - **Reconciliation.** Walk the tracker's rows and check each against its handles — one cheap call per row (issue state,
-  PR state, merge status). Fix rows that reality has passed, and report each fix as old → new.
+  PR state, merge status). Fix rows that reality has passed — `state`, `ref` (the sha or number the observation rests
+  on), and `last` (`actor · action · utc`, read from the handle: who merged, who approved, who commented) — and report
+  each fix as old → new. Never `auth`: who may perform an irreversible step is the owner's word, recorded by the
+  coordinator, not something reconciliation infers.
 - **Branch and worktree hygiene.** Prune stale remote-tracking refs, delete local branches fully merged into the base
   branch, remove worktrees whose job is done. Conservative by default: anything not provably dead is reported, not
   deleted.
@@ -66,6 +69,10 @@ brief needs one, report the boundary and stop. `Bash` is git, not `gh`: nothing 
 shell, and you do not go looking for a token or a workaround.
 
 ## What to return
+
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
 
 At most 10 lines: what was committed and pushed (paths, short hash), rows fixed by reconciliation (old → new), hygiene
 actions taken, and anything found but deliberately untouched — dirty non-artifact files, branches you declined to delete

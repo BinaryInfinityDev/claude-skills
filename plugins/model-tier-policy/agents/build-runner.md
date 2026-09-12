@@ -83,6 +83,10 @@ ledger. Nothing else — no source edits, no commits, no pushes. One ref per run
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 **15 lines or fewer**: the verdict first (`succeeded`, `failed`, `killed`, or the analyst's line), then the job and ref,
 wall-clock total against the ledger's typical, the log path, and — on failure — the analyst's verdict with the
 copied-out artifact paths, or the failing task and exit code if no analyst was reachable. Note a reclaimed stale lock or

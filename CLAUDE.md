@@ -75,6 +75,10 @@ does not install them into its own `.claude/`.
   version" over a stale cache when it is skipped. The pre-commit hook (`scripts/check-plugin-versions.sh`) blocks a
   commit that changes a plugin's content without changing its version. Validate with `claude plugin validate .`
   (marketplace) and `claude plugin validate ./plugins/<name>` before merging.
+- The model-tier-policy hooks and installer are Python with no CI, so `scripts/check-hooks.sh` (a wrapper over
+  `scripts/check_hooks.py`) is their committed test bed, run by the pre-commit hook: python3 only, no network, a few
+  seconds. It never skips — a case that cannot run fails — because a check that reports PASS with cases omitted answers
+  a different question than it appears to.
 
 ## Adding a new skill
 

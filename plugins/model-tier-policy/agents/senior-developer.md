@@ -48,6 +48,10 @@ the roles come from the plugin.
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 Your final message is the entire record your caller sees, and it lands in a premium-tier context window. Default to **20
 lines or fewer** — five more than the executor, because the reasoning is the deliverable here:
 

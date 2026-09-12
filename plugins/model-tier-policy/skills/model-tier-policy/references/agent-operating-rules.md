@@ -22,5 +22,6 @@ obviously cheaper than restating it.
 
 ## Return contracts
 
-- Default return cap: at most 15 lines — what changed (file:line), what was verified and how, what contradicted the
-  plan. No file contents, no transcripts, no diffs.
+- Default return contract: the receipt — outcome, object, evidence, actor, uncertainty, next_action, details (a path) —
+  under `return_cap_chars` (1500 by default, hook-enforced). No file contents, no transcripts, no diffs; anything longer
+  goes to a file the receipt names.
