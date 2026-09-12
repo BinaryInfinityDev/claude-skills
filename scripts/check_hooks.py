@@ -425,14 +425,22 @@ check("receipt: stop_hook_active -> never a second block", run_hook(RECEIPT, sto
 check("receipt: worker posture -> not capped", run_hook(RECEIPT, stop(worker, tr_w, LONG)), None)
 # Two returns filed under one name inside one second — parallel dispatch ends subagents together, and the fallback
 # names (`agent`, `return`) are shared — must both survive: an overwrite would leave one receipt's `details:` path
-# pointing at another agent's text.
+# pointing at another agent's text. The pair is re-run until both calls land inside one wall-clock second, so the case
+# reproduces the overwrite scenario instead of passing whenever the two runs straddle a second boundary.
 twin = dict(stop(orch, tr_o, LONG + "-first"), session_id="c" + RUN)
-run_hook(RECEIPT, twin)
-run_hook(RECEIPT, dict(twin, last_assistant_message=LONG + "-second"))
 twin_dir = os.path.join(orch, ".claude", "receipts", "c" + RUN)
+same_second = False
+for _ in range(5):
+    shutil.rmtree(twin_dir, ignore_errors=True)
+    t0 = time.time()
+    run_hook(RECEIPT, twin)
+    run_hook(RECEIPT, dict(twin, last_assistant_message=LONG + "-second"))
+    same_second = int(t0) == int(time.time())
+    if same_second:
+        break
 twin_texts = [open(os.path.join(twin_dir, f), encoding="utf-8").read() for f in os.listdir(twin_dir)] if os.path.isdir(twin_dir) else []
-check("receipt: two returns filed under one name in one second are both kept, never overwritten",
-      len(twin_texts) == 2 and any(t.endswith(LONG + "-first") for t in twin_texts) and any(t.endswith(LONG + "-second") for t in twin_texts))
+check("receipt: two returns filed under one name inside one second are both kept, never overwritten",
+      same_second and len(twin_texts) == 2 and any(t.endswith(LONG + "-first") for t in twin_texts) and any(t.endswith(LONG + "-second") for t in twin_texts))
 post = {"cwd": orch, "transcript_path": tr_o, "hook_event_name": "PostToolUse", "session_id": "r" + RUN, "tool_name": "Agent",
         "tool_input": {"subagent_type": "executor"}, "tool_response": LONG, "tool_use_id": "toolu_1"}
 r = run_hook(RECEIPT, post)

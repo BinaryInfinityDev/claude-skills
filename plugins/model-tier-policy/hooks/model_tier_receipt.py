@@ -64,7 +64,12 @@ def file_receipt(root, cfg, payload, name, text):
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
             except FileExistsError:
                 continue
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            try:
+                fh = os.fdopen(fd, "w", encoding="utf-8")
+            except Exception:
+                os.close(fd)  # the descriptor is ours until the file object owns it
+                raise
+            with fh:
                 fh.write(
                     "# Filed return — %s\n\nagent: %s\nfiled: %s\nchars: %d\n\n---\n\n"
                     % (name, payload.get("agent_type") or "unknown", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), len(text))
