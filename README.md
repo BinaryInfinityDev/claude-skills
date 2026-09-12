@@ -11,16 +11,17 @@ instead of copy-and-forget.
 /plugin install model-tier-policy@claude-skills
 ```
 
-| Plugin               | Contents                                                                                               |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `model-tier-policy`  | The tier-policy skill, eleven pinned-model agents, and both enforcement hooks with their reminder text |
-| `git-workflow`       | `start-session`, `end-session`                                                                         |
-| `project-management` | `ingest-artifact`, `record-decision`                                                                   |
-| `time-tracking`      | `session-timelog`, `time-report`                                                                       |
-| `technical-writing`  | `write-in-simplified-technical-english`                                                                |
+| Plugin               | Version                                          | Contents                                                                                        |
+| -------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `model-tier-policy`  | [1.8.7](plugins/model-tier-policy/CHANGELOG.md)  | The tier-policy skill, eleven pinned-model agents, and the three hooks with their reminder text |
+| `git-workflow`       | [1.0.1](plugins/git-workflow/CHANGELOG.md)       | `start-session`, `end-session`                                                                  |
+| `project-management` | [1.0.1](plugins/project-management/CHANGELOG.md) | `ingest-artifact`, `record-decision`                                                            |
+| `time-tracking`      | [1.0.1](plugins/time-tracking/CHANGELOG.md)      | `session-timelog`, `time-report`                                                                |
+| `technical-writing`  | [1.0.1](plugins/technical-writing/CHANGELOG.md)  | `write-in-simplified-technical-english`                                                         |
 
-Installed plugins are versioned (`plugin.json` semver) and update through the marketplace: third-party marketplaces do
-not auto-update by default, so either toggle auto-update for `claude-skills` in `/plugin` → Marketplaces or pull updates
+Each version above links to that plugin's history — what every release added, and what is still outstanding. Installed
+plugins are versioned (`plugin.json` semver) and update through the marketplace: third-party marketplaces do not
+auto-update by default, so either toggle auto-update for `claude-skills` in `/plugin` → Marketplaces or pull updates
 with `claude plugin marketplace update claude-skills`. Plugin skills are invoked as `/plugin-name:skill-name` (e.g.
 `/git-workflow:start-session`).
 

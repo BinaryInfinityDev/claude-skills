@@ -1,6 +1,6 @@
 {
   "name": "time-tracking",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Record sessions as content-free timelines on a tracking branch; build time reports and timesheets from them",
   "author": {
     "name": "BinaryInfinityDev"
