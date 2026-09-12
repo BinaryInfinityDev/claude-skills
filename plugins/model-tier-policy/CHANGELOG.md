@@ -20,6 +20,15 @@ entry that settles one of its items says so.
   Code CLI behaviour, not a plugin defect; the skill's remote section says to check `git diff` after a teardown (#16).
 - `build-analyst` is Gradle-first. Maven support is deliberately absent rather than shipped untested (#7).
 
+## 1.8.9 — 2026-09-12 — [#36](https://github.com/BinaryInfinityDev/claude-skills/pull/36)
+
+- **Changed:** what is tracked is decided once, by one test — does the content have to outlive the session and the
+  machine? — in the coordination-artifacts rule, and the steward commits every tracked artifact whoever wrote it. The
+  build timing ledger is tracked by that test (its purpose is to tell a future run what normal looks like, and a fresh
+  container has only what git has), the runner lock and receipts are not, and a tracked file left dirty is a commit for
+  the steward, never a reason to untrack it. The steward's artifact list names the ledger; the runner and the
+  worktree-builds rule say why it is committed and by whom.
+
 ## 1.8.8 — 2026-09-12 — [#35](https://github.com/BinaryInfinityDev/claude-skills/pull/35)
 
 - **Added:** this version history ([#34](https://github.com/BinaryInfinityDev/claude-skills/issues/34)), and the

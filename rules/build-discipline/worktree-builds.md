@@ -25,7 +25,9 @@ in-tree; anything long enough to tie up the working tree does not.
   log — before removal, and return those paths with the results. A persistent worktree is cleaned of run artifacts
   (logs, reports) the same way, but keeps its build caches.
 - Record completed runs in the timing ledger (`paths.timings`, default `.claude/build-timings.md`) so future runs know
-  what "normal" looks like; a run far past its typical wall-clock is hung, not slow.
+  what "normal" looks like; a run far past its typical wall-clock is hung, not slow. The ledger is tracked — a fresh
+  container has only what git has, and a ledger that does not survive one cannot tell the next run anything — and the
+  steward commits it, whoever appended it; a ledger left dirty by a run is a commit, never a reason to untrack it.
 
 ## Where fixes land
 

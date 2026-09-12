@@ -95,6 +95,25 @@ to `git-steward` (Sonnet 5), dispatched per invocation and never kept resident. 
 one tracker-row edit and a one-line dispatch, not a git session. The steward never pushes feature work:
 coordination-artifact paths only, and anything else it finds dirty is reported, never committed and never stashed.
 
+## What is tracked, and why
+
+Whether a file is tracked is decided by one question, never by who writes it: **does its content have to outlive the
+session and the machine?** A fresh Claude Code Remote container starts from what git has, and anything git does not hold
+is gone at the next session. By that test:
+
+- **Tracked:** a plan, tracker, and addendum that span sessions; decisions (`paths.decisions`); reviews
+  (`paths.reviews`); the operating-rules file (`paths.operating_rules`); and the build timing ledger (`paths.timings`),
+  whose entire purpose is to tell a future run what normal looks like — a ledger that dies with the container cannot.
+- **Not tracked:** the runner lock (`paths.runner_lock`), a PID on one machine; receipts (`paths.receipts`), whose value
+  ends when the tracker row records the outcome; build logs and copied-out artifacts, consumed from the temp directory
+  and discarded; and a plans directory only when its plans genuinely never need to outlive the session.
+
+Who writes a tracked file is irrelevant to who commits it. The architect writes the plan, the coordinator edits the
+tracker, the runner appends the ledger, the reviewer files a review — and the steward commits every one of them, because
+no other role's job includes git. A tracked artifact left dirty in the tree — the ledger is, after every bar run, since
+the append is what dirties it — is a commit for the steward, never a reason to untrack the file: untracking trades one
+stop-hook nag for the loss of the thing the file exists to keep.
+
 ## Consolidation
 
 Periodically — a milestone completes, a sprint ends, the plan visibly diverges — the architect reads the tracker plus
