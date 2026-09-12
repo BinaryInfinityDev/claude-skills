@@ -11,6 +11,7 @@ and decision recording.
 plugins/
   {plugin-name}/    — one self-contained plugin per cohesive unit
     .claude-plugin/plugin.json — plugin manifest (name, version, description)
+    CHANGELOG.md  — version history: outstanding items first, then each release newest-first
     skills/{skill-name}/
       SKILL.md      — the skill definition (frontmatter + instructions)
       references/   — optional supporting files (templates, schemas, examples)
@@ -73,8 +74,10 @@ does not install them into its own `.claude/`.
 - Plugins are versioned with semver in `.claude-plugin/plugin.json`. Bump the version on any content change — that is
   the signal installed copies use to know an update exists, and `claude plugin update` reports "already at the latest
   version" over a stale cache when it is skipped. The pre-commit hook (`scripts/check-plugin-versions.sh`) blocks a
-  commit that changes a plugin's content without changing its version. Validate with `claude plugin validate .`
-  (marketplace) and `claude plugin validate ./plugins/<name>` before merging.
+  commit that changes a plugin's content without changing its version, and one that changes the version without a
+  matching `## <version>` entry in the plugin's `CHANGELOG.md` and a README plugin-table row at that version — the
+  history ships with the plugin, outstanding items first, releases newest-first. Validate with
+  `claude plugin validate .` (marketplace) and `claude plugin validate ./plugins/<name>` before merging.
 - The model-tier-policy hooks and installer are Python with no CI, so `scripts/check-hooks.sh` (a wrapper over
   `scripts/check_hooks.py`) is their committed test bed, run by the pre-commit hook: python3 only, no network, a few
   seconds. It never skips — a case that cannot run fails — because a check that reports PASS with cases omitted answers
@@ -87,7 +90,7 @@ does not install them into its own `.claude/`.
    reference implementations go under top-level `skills/` instead, unpackaged.
 2. If the skill needs reference files (schemas, templates), add them to its `references/` directory.
 3. Bump the plugin's `version` in its `.claude-plugin/plugin.json` — that is what tells installed copies an update
-   exists.
+   exists — record the change in the plugin's `CHANGELOG.md`, and move the README's plugin table to the new version.
 4. Update the skill catalog below.
 
 ## Adding a new rule
@@ -105,7 +108,7 @@ does not install them into its own `.claude/`.
    skill exists to prevent.
 3. If it declares `tools:`, end its `description` with a `Boundary:` clause (see Conventions) — the pre-commit check
    refuses a restricted agent without one.
-4. Add it to the agent catalog in the README, and bump the plugin's `version`.
+4. Add it to the agent catalog in the README, bump the plugin's `version`, and record it in the plugin's `CHANGELOG.md`.
 5. If a skill installs it by hand too, add it to that skill's installer — `model-tier-policy` sources its agents from
    `plugins/model-tier-policy/agents/`, so a new role there needs a line in
    `plugins/model-tier-policy/skills/model-tier-policy/references/install.py`.
