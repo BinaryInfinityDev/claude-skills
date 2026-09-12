@@ -5,4 +5,4 @@ actor, approval, and precedent in the summary is unverified. Reload state from t
 (`{plans}/<slug>.tracker.md` — its `last` and `auth` columns are the ledger); do not perform, and do not dispatch, any
 irreversible action — a merge, a push to a shared branch, a close, a delete — on the strength of the summary; re-verify
 the current ref and the authorization state first, one cheap call each. Before the next dispatch, have "{steward}"
-reconcile the tracker's rows against their handles.]
+reconcile the tracker's rows against their handles.

@@ -11,6 +11,7 @@ model, CLAUDE_PROJECT_DIR at a scratch repo, HOME at a sandbox so no user-scope 
 
 import atexit
 import json
+import time
 import os
 import re
 import shutil
@@ -238,6 +239,18 @@ check("auth: create_or_update_file to master denied", decision(guard(worker, tr_
 check("auth: push_files to a feature branch allowed", decision(guard(worker, tr_w, "mcp__github__push_files", {"branch": "feat/x"}, agent_id="a1")), None)
 prot, tr_prot = make_repo({"authorization": {"protected_branches": ["release"]}}, "claude-opus-5")
 check("auth: configured protected_branches drive the tripwire", (decision(guard(prot, tr_prot, "Bash", {"command": "git push origin release"})), decision(guard(prot, tr_prot, "Bash", {"command": "git push origin main"}))), ("deny", None))
+for command in ("gh api -XPUT repos/o/r/pulls/5/merge", "gh api repos/o/r/pulls/5/merge --method PUT",
+                "gh api --input body.json repos/o/r/pulls/5/merge", "git push origin 'refs/heads/main'",
+                "git push --force origin main", "git push origin main:main"):
+    check("auth tripwire: %r denied" % command, decision(guard(worker, tr_w, "Bash", {"command": command})), "deny")
+check("auth tripwire: the phrase in a quoted string trips it too (accepted, documented)", decision(guard(worker, tr_w, "Bash", {"command": 'echo "git push origin main"'})), "deny")
+# The tripwire stays linear: a long command of repeated tokens must not run the hook into its timeout, where a timed-out
+# PreToolUse hook renders no decision at all.
+for label, command in (("gh api", "gh api x " * 4500), ("git push", "git push x " * 3700), ("mixed", "gh api x git push y ; " * 2000)):
+    started = time.monotonic()
+    r = guard(worker, tr_w, "Bash", {"command": command})
+    elapsed = time.monotonic() - started
+    check("auth tripwire: a 40 KB command of repeated '%s' tokens answers in under 3 s (took %.2f s)" % (label, elapsed), elapsed < 3.0 and decision(r) is None)
 session_cfg, tr_s = make_repo({"authorization": {"merge_authority": "session"}}, "claude-opus-5")
 check("auth: merge_authority session allows the merge", decision(guard(session_cfg, tr_s, "mcp__github__merge_pull_request", {})), None)
 bad_cfg, tr_b = make_repo({"authorization": {"merge_authority": None}}, "claude-opus-5")
@@ -274,6 +287,10 @@ sess_u = "u" + RUN
 for i in range(2):
     guard(orch, tr_o, "mcp__github__get_me", {}, session=sess_u)
 check("orch: a GitHub read the lists do not name is still budgeted, never free", decision(guard(orch, tr_o, "mcp__github__get_me", {}, session=sess_u)), "deny")
+sess_s = "sub" + RUN
+subs = [decision(guard(orch, tr_o, tool, {"owner": "o", "repo": "r", "pullNumber": 1}, session=sess_s)) for tool in
+        ("mcp__github__subscribe_pr_activity", "mcp__Claude_Code_Remote__subscribe_pr_activity", "mcp__github__unsubscribe_pr_activity", "mcp__github__subscribe_pr_activity")]
+check("orch: subscribing to PR events is coordination — allowed on the orchestrator posture and unbudgeted", subs, [None] * 4)
 check("orch pull_request_read get allowed", decision(guard(orch, tr_o, "mcp__github__pull_request_read", {"method": "get"})), None)
 sess = "o" + RUN
 guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"}, session=sess)
@@ -404,6 +421,13 @@ check("receipt: the real Agent shape — content blocks cut, prompt and siblings
       and isinstance(out.get("content"), list) and "full text is at" in out["content"][0]["text"])
 post["tool_response"] = {"status": "completed", "prompt": "p" * 2500, "content": [{"type": "text", "text": "done"}]}
 check("receipt: a long brief with a short return is not a long return", run_hook(RECEIPT, post), None)
+post["tool_response"] = {"status": "completed", "content": [{"type": "text", "text": "b" * 200} for _ in range(10)]}
+out = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {}).get("updatedToolOutput")
+kept = "".join(b["text"] for b in out["content"] if isinstance(b, dict)) if isinstance(out, dict) else ""
+check("receipt: ten 200-char blocks are cut cumulatively to the cap, not left whole", isinstance(out, dict) and len(out["content"]) == 8 and kept.startswith("b" * 1500) and "b" * 1501 not in kept and "of 2009 chars" in kept)
+post["tool_response"] = [{"type": "text", "text": "c" * 3000} for _ in range(5)]
+out = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {}).get("updatedToolOutput")
+check("receipt: five 3000-char blocks in a bare list -> one cut block, the rest dropped", isinstance(out, list) and len(out) == 1 and out[0]["text"].startswith("c" * 1500) and "c" * 1501 not in out[0]["text"])
 zero, tr_z = make_repo({"orchestrator_mode": True, "return_cap_chars": 0}, "claude-opus-5")
 check("receipt: return_cap_chars 0 disables", run_hook(RECEIPT, stop(zero, tr_z, LONG)), None)
 
@@ -537,6 +561,9 @@ for rel in ("build-discipline/worktree-builds.md", "coordination/coordination-ar
 check("rules: semi-linear-history byte-identical to .claude/rules",
       open(os.path.join(ROOT, "rules", "git-etiquette", "semi-linear-history.md"), "rb").read()
       == open(os.path.join(ROOT, ".claude", "rules", "git-etiquette", "semi-linear-history.md"), "rb").read())
+for name in sorted(os.listdir(os.path.join(HOOKS, "context"))):
+    text = open(os.path.join(HOOKS, "context", name), encoding="utf-8").read()
+    check("fragment %s: brackets balanced" % name, text.count("["), text.count("]"))
 plugin_events = set(json.load(open(os.path.join(HOOKS, "hooks.json")))["hooks"])
 snippet_events = set(json.load(open(os.path.join(REFS, "settings-snippet.json")))["hooks"])
 check("hooks.json and settings-snippet.json wire the same events", plugin_events, snippet_events)

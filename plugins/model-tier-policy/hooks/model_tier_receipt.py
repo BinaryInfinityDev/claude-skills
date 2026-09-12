@@ -90,20 +90,31 @@ def response_text(response):
     return ""
 
 
-def cut(text, cap, path):
-    trailer = "\n\n[model tier policy: return cut to %d of %d chars; the full text is at %s]" % (cap, len(text), path or "(not filed)")
+def cut(text, cap, path, total=None):
+    trailer = "\n\n[model tier policy: return cut to %d of %d chars; the full text is at %s]" % (
+        cap, total if total is not None else len(text), path or "(not filed)")
     return text[:cap] + trailer
 
 
-def cut_body(body, cap, path):
+def cut_body(body, cap, path, total):
+    """The body cut to the cap — for a block list, cumulatively: the cap is a budget over the whole return, the block
+    that crosses it is cut to what remains, and every block after it is dropped. Cutting each block on its own let a
+    return of many short blocks pass whole while being announced as over the cap."""
     if isinstance(body, str):
-        return cut(body, cap, path)
+        return cut(body, cap, path, total)
     if isinstance(body, list):
-        out = []
+        out, used = [], 0
         for block in body:
-            if isinstance(block, dict) and isinstance(block.get("text"), str) and len(block["text"]) > cap:
-                block = dict(block, text=cut(block["text"], cap, path))
-            out.append(block)
+            if not (isinstance(block, dict) and isinstance(block.get("text"), str)):
+                out.append(block)
+                continue
+            text = block["text"]
+            if used + len(text) <= cap:
+                out.append(block)
+                used += len(text)
+                continue
+            out.append(dict(block, text=cut(text, max(cap - used, 0), path, total)))
+            return out
         return out
     return None
 
@@ -113,7 +124,7 @@ def replaced_response(response, cap, path):
     which is the safe failure: the original output stands and the context line still says where the full text is.
     Only the text field is touched; every other field, the coordinator's `prompt` included, is echoed untouched."""
     body, key = response_body(response)
-    replacement = cut_body(body, cap, path)
+    replacement = cut_body(body, cap, path, len(response_text(response)))
     if replacement is None:
         return None
     if key is None:

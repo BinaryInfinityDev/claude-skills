@@ -60,31 +60,25 @@ DEFAULTS = {
     # Who may merge. Authorization is project policy, kept outside the orchestration policy on purpose: it is read
     # from this file, never from what a session remembers, and it binds every agent in the session, subagents
     # included. "owner" (the default) denies merging and auto-merge to the session entirely; "session" lets it.
-    # The command patterns are a tripwire over the ordinary spellings, not a boundary — a shell can always be made to
-    # say something the regexes do not cover; GitHub branch protection is the boundary. `{branches}` in a pattern is
-    # replaced by the protected-branch alternation.
+    # The shell rules are a tripwire over the ordinary spellings, not a boundary — a shell can always be made to say
+    # something they do not cover; GitHub branch protection is the boundary. The git-push and gh-api rules are built
+    # in (see merge_command_hit) and read `protected_branches`; `merge_commands` adds patterns, applied per command
+    # segment, with `{branches}` replaced by the protected-branch alternation.
     "authorization": {
         "merge_authority": "owner",
         "protected_branches": ["main", "master"],
         "merge_tools": [r"^mcp__github__(merge_pull_request|enable_pr_auto_merge|disable_pr_auto_merge)$"],
         # Tools that write straight to a branch: denied when their `branch` argument is a protected branch.
         "branch_write_tools": [r"^mcp__github__(push_files|create_or_update_file|delete_file)$"],
-        "merge_commands": [
-            # git push naming a protected branch as a refspec: `origin main`, `HEAD:main`, `HEAD:refs/heads/main`,
-            # `+main`, `:main` (a delete), quoted or not, with `-c`/`-C`/--git-dir options before `push`.
-            r"\bgit(?:\s+-[cC]\s*\S+|\s+--(?:git-dir|work-tree|namespace)=\S+)*\s+push\b[^;&|]*?"
-            r"(?:[\s:+\"'])(?:refs/heads/)?(?:{branches})(?![\w./-])",
-            r"\bgh\s+pr\s+merge\b",
-            # gh api with a mutating method or fields against a merge endpoint; the bare GET `pulls/N/merge` ("is it
-            # merged?") is a reconciliation read and stays allowed.
-            r"\bgh\s+api\b(?=[^;&|]*(?:(?:-X|--method)[\s=]*(?:PUT|POST|PATCH)|\s-[fF]\s|\s--(?:raw-)?field[\s=]"
-            r"|\s--input[\s=]))[^;&|]*/merges?(?![\w-])",
-            r"\bgh\s+api\s+graphql\b[^;&|]*\b(?:mergePullRequest|enablePullRequestAutoMerge)\b",
-        ],
+        "merge_commands": [r"\bgh\s+pr\s+merge\b"],
     },
     # Tools a coordinating session may use even though they mutate external state — on the premium posture as much
     # as the orchestrator one, because tickets are the plan's home on either. The key's name predates that.
-    "orchestrator_tools_allowed": [r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"],
+    "orchestrator_tools_allowed": [
+        r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$",
+        # Subscribing a session to a PR's events is coordination, not repo mutation — allowed and unbudgeted.
+        r"^mcp__\w+__(subscribe_pr_activity|unsubscribe_pr_activity)$",
+    ],
     # Where the policy's file conventions live in THIS repo. Every rule, role, and reminder that names one of these
     # paths defers to this block, so a repo that keeps plans in docs/plans/ declares it once here instead of bending
     # its layout to the plugin's defaults. Individual keys only, no root: real repos split these locations (plans in
@@ -361,7 +355,7 @@ def cfg_pattern(cfg):
     """The premium-model regex, falling back to the shipped default when the config value is not a usable string.
 
     A `"premium_model_pattern": null` must not turn into no denials and no reminder: with the exception swallowed by
-    both hooks' fail-open wrappers, that would be the policy going quiet without saying so.
+    every hook's fail-open wrapper, that would be the policy going quiet without saying so.
     """
     value = cfg.get("premium_model_pattern")
     if isinstance(value, str) and value:
@@ -409,7 +403,7 @@ def premium_model(cfg, model):
 def posture(cfg, model):
     """Which posture the guard and the reminder take for this session: premium, orchestrator, worker, or disabled.
 
-    One resolver for both hooks, so a denial and the reminder that explains it can never disagree.
+    One resolver for every hook, so a denial and the reminder that explains it can never disagree.
 
     With orchestrator mode on, the orchestrator role has a configured model and the session is expected to run on it
     — or below; a cheaper coordinator is fine. A session opened on a *higher* tier than the configured orchestrator
@@ -566,6 +560,45 @@ def resolved_authorization(cfg):
     return auth
 
 
+# The built-in shell rules. Each is a cheap search on one command segment, and the refspec after a `git push` is looked
+# for in a bounded window past it, so the cost stays linear in the command's length: a rule that rescanned from every
+# occurrence went quadratic, and a long enough command — a heredoc full of `gh api` examples — timed the hook out, and a
+# timed-out PreToolUse hook renders no decision at all.
+GIT_PUSH_RE = re.compile(r"\bgit(?:\s+-[cC]\s*\S+|\s+--(?:git-dir|work-tree|namespace)=\S+)*\s+push\b")
+REFSPEC_WINDOW = 512
+GH_API_RE = re.compile(r"\bgh\s+api\b")
+GH_MUTATING_RE = re.compile(r"(?:-X|--method)[\s=]*(?:PUT|POST|PATCH)\b|\s-[fF]\s|\s--(?:raw-)?field[\s=]|\s--input[\s=]")
+GH_MERGE_ENDPOINT_RE = re.compile(r"/merges?(?![\w-])")
+GH_GRAPHQL_MERGE_RE = re.compile(r"\b(?:mergePullRequest|enablePullRequestAutoMerge)\b")
+
+
+def branch_token_re(branches):
+    """A protected branch named as a refspec: `origin main`, `HEAD:main`, `HEAD:refs/heads/main`, `+main`, `:main`
+    (a delete), quoted or not; `main-fix`, `mainline`, and `feature/main-menu` are not it."""
+    return re.compile(r"(?:^|[\s:+\"'])(?:refs/heads/)?(?:%s)(?![\w./-])" % "|".join(re.escape(b) for b in branches))
+
+
+def merge_command_hit(auth, command):
+    """True when a shell command trips the merge tripwire — per segment, linear in the command's length.
+
+    Deliberately over-broad: the phrase inside a quoted string or a heredoc trips it too. The denial explains itself,
+    and parsing shell to avoid that false positive would be worse than the false positive.
+    """
+    token = branch_token_re(auth["protected_branches"])
+    for segment in re.split(r"[;&|]+", command):
+        if matches_any(auth["merge_commands"], segment):
+            return True
+        for match in GIT_PUSH_RE.finditer(segment):
+            if token.search(segment[match.end() : match.end() + REFSPEC_WINDOW]):
+                return True
+        if GH_API_RE.search(segment):
+            if GH_GRAPHQL_MERGE_RE.search(segment):
+                return True
+            if GH_MUTATING_RE.search(segment) and GH_MERGE_ENDPOINT_RE.search(segment):
+                return True
+    return False
+
+
 def check_authorization(cfg, tool, tool_input):
     """The denial for a merge the repo's authorization policy reserves to the owner, or None.
 
@@ -584,7 +617,7 @@ def check_authorization(cfg, tool, tool_input):
             hit = "%s to %s" % (tool, branch.strip())
     elif tool == "Bash":
         command = tool_input.get("command")
-        if isinstance(command, str) and matches_any(auth["merge_commands"], command):
+        if isinstance(command, str) and merge_command_hit(auth, command):
             hit = "this shell command"
     if not hit:
         return None
@@ -843,8 +876,9 @@ def orchestrator_reads(root, cfg, refs, models, payload, tool, tool_input):
     elif matches_any(cfg_list(cfg, "orchestrator_state_reads"), tool) or (
         tool.startswith("mcp__github__") and not matches_any(cfg_list(cfg, "procedural_tools_denied"), tool)
     ):
-        # Every GitHub *read* this posture reaches is a state read for budget purposes — none is free. A mutating
-        # GitHub tool is not a read: it falls through to the procedural denial below, never to the allow here.
+        # Every GitHub read this posture reaches is a state read for budget purposes — none is free. A tool the
+        # procedural denial list names is not a read and falls through to that denial; a mutation the list does not
+        # name (a subscription, say) is budgeted here like a read, and the ticket tools were allowed above.
         counted = True
 
     if not counted:
