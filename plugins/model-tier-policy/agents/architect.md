@@ -33,6 +33,10 @@ the session escalated to you because judgement was needed, so give judgement, no
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 A decision the caller can act on without further interpretation:
 
 - **The call** — what to do, stated plainly
@@ -66,9 +70,10 @@ return.
 1. Write `<slug>.plan.md`: scope, decisions, dependencies, acceptance — only what does not churn, so its headings — the
    sections the tracker's rows cite — stay true for the life of the work.
 2. Seed `<slug>.tracker.md` from it, one row per step, in the shape the coordination-artifacts rule gives: id, what (a
-   phrase), depends on, blocked by, the plan section for that step (its heading, cited by anchor), a size estimate, and
-   the state. The rows are the dispatch index: a worker's brief becomes "step 7 — `<plan path>#<section-anchor>`", and
-   the worker reads only that section.
+   phrase), the plan section for that step (its heading, cited by anchor), depends on, a size estimate, the state, and
+   the provenance columns — `ref`, `last`, `auth` (who may perform the step's irreversible action, `merge: owner` by
+   default), `next`, `details` — left empty where nothing has happened yet. The rows are the dispatch index: a worker's
+   brief becomes "step 7 — `<plan path>#<section-anchor>`", and the worker reads only that section.
 3. Return a short brief the coordinator can dispatch from without opening the plan: what needs to be done, how to
    delegate it (which role, which rows), and in what order — plus anything the tickets contradicted. A few lines: the
    tracker carries the detail and survives compaction, and the brief is the index the coordinator holds.

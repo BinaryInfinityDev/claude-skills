@@ -51,6 +51,10 @@ only.
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 **15 lines or fewer**: the verdict line first, then the evidence (log line numbers, report path, assertion text
 distilled), then — only when undetermined — the narrowest re-run that would settle it. Never file contents, never more
 than three quoted lines.

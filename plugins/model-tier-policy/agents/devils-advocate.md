@@ -48,6 +48,10 @@ GitHub write tools and no edit tools; if the task needs one, report the boundary
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 **20 lines or fewer**, or the cap the brief sets:
 
 - **Verdict** — `proceed`, `fix first`, or `rethink`, on the first line, alone

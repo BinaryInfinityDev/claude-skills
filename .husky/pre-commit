@@ -2,3 +2,4 @@ npx lint-staged
 ./scripts/check-plugin-versions.sh
 ./scripts/check-rule-links.sh
 ./scripts/check-agent-boundaries.sh
+./scripts/check-hooks.sh

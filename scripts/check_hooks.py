@@ -1,0 +1,461 @@
+#!/usr/bin/env python3
+"""Test bed for the model-tier-policy hooks and installer — run per commit, python3 only, no network.
+
+Copilot's note on PR #27 was that with no CI it could not judge the Python; everything here was being run by hand from
+a scratchpad (#29). It is committed now, and it never skips: a case that cannot run fails, because a gate that reports
+PASS with cases omitted is reporting on a different question than the one it appears to answer (#31, finding 2).
+
+Every hook is exercised the way Claude Code drives it — a JSON payload on stdin, a one-line transcript naming the
+model, CLAUDE_PROJECT_DIR at a scratch repo, HOME at a sandbox so no user-scope config overlays.
+"""
+
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PLUGIN = os.path.join(ROOT, "plugins", "model-tier-policy")
+HOOKS = os.path.join(PLUGIN, "hooks")
+GUARD = os.path.join(HOOKS, "model_tier_guard.py")
+CTX = os.path.join(HOOKS, "model_tier_context.py")
+RECEIPT = os.path.join(HOOKS, "model_tier_receipt.py")
+INSTALL = os.path.join(PLUGIN, "skills", "model-tier-policy", "references", "install.py")
+REFS = os.path.join(PLUGIN, "skills", "model-tier-policy", "references")
+SCRATCH = tempfile.mkdtemp(prefix="check-hooks-")
+RUN = os.urandom(3).hex()
+
+sys.path.insert(0, HOOKS)
+import model_tier_guard as g  # noqa: E402
+
+failures = []
+count = [0]
+
+
+def check(name, got, want=True):
+    count[0] += 1
+    ok = got == want
+    if not ok:
+        failures.append("%s (got %r, want %r)" % (name, got, want))
+    return ok
+
+
+def tmp(prefix):
+    return tempfile.mkdtemp(prefix=prefix + "-", dir=SCRATCH)
+
+
+def make_repo(cfg, model, agents=False):
+    root = tmp("repo")
+    os.makedirs(os.path.join(root, ".claude", "plans"))
+    os.makedirs(os.path.join(root, "src"))
+    json.dump(cfg, open(os.path.join(root, ".claude", "model-tier-policy.json"), "w"))
+    open(os.path.join(root, ".claude", "plans", "p.tracker.md"), "w").write("| m1 |\n" * 300)
+    open(os.path.join(root, ".claude", "plans", "p.plan.md"), "w").write("# plan\n")
+    open(os.path.join(root, ".claude", "agent-operating-rules.md"), "w").write("rules\n")
+    open(os.path.join(root, "src", "main.py"), "w").write("print(1)\n")
+    if agents:
+        shutil.copytree(os.path.join(PLUGIN, "agents"), os.path.join(root, ".claude", "agents"))
+    tr = os.path.join(root, "main.jsonl")
+    if model:
+        open(tr, "w").write(json.dumps({"type": "assistant", "message": {"model": model}}) + "\n")
+    else:
+        open(tr, "w").close()
+    return root, tr
+
+
+def run_hook(script, payload, env_extra=None):
+    env = dict(os.environ)
+    for key in ("MODEL_TIER_POLICY", "MODEL_TIER_ORCHESTRATOR", "CLAUDE_PLUGIN_ROOT"):
+        env.pop(key, None)
+    env["CLAUDE_PROJECT_DIR"] = payload["cwd"]
+    env["HOME"] = payload["cwd"]
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.run([sys.executable, script], input=json.dumps(payload), capture_output=True, text=True, env=env)
+    out = proc.stdout.strip()
+    try:
+        return json.loads(out) if out else None
+    except ValueError:
+        return {"_raw": out}
+
+
+def call(root, tr, tool, tool_input=None, prompt="p1", session=None, **extra):
+    payload = {"cwd": root, "transcript_path": tr, "tool_name": tool, "tool_input": tool_input or {},
+               "session_id": session or "s" + RUN + os.urandom(2).hex(), "prompt_id": prompt,
+               "tool_use_id": os.urandom(4).hex(), "hook_event_name": "PreToolUse"}
+    payload.update(extra)
+    return payload
+
+
+def decision(res):
+    return (res or {}).get("hookSpecificOutput", {}).get("permissionDecision")
+
+
+def reason(res):
+    return (res or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+
+
+def updated(res):
+    return (res or {}).get("hookSpecificOutput", {}).get("updatedInput")
+
+
+def guard(root, tr, tool, tool_input=None, **kw):
+    return run_hook(GUARD, call(root, tr, tool, tool_input, **kw))
+
+
+def context(root, tr, event="UserPromptSubmit", session=None, prompt=None, script=CTX, **extra):
+    payload = {"cwd": root, "transcript_path": tr, "hook_event_name": event, "session_id": session or "c" + RUN}
+    if prompt:
+        payload["prompt_id"] = prompt
+    payload.update(extra)
+    return (run_hook(script, payload) or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
+
+
+def unfilled(text):
+    return re.findall(r"\{[a-z_]+\}", text)
+
+
+# ---------------------------------------------------------------------------------------------------------------- compile
+for script in (GUARD, CTX, RECEIPT, INSTALL):
+    proc = subprocess.run([sys.executable, "-m", "py_compile", script], capture_output=True, text=True)
+    check("compile %s" % os.path.basename(script), proc.returncode, 0)
+
+# ---------------------------------------------------------------------------------------------------------- guard: postures
+premium, tr_p = make_repo({}, "claude-fable-5-1")
+orch, tr_o = make_repo({"orchestrator_mode": True}, "claude-opus-5")
+worker, tr_w = make_repo({}, "claude-opus-5")
+disabled, tr_d = make_repo({"orchestrator_mode": True}, "claude-fable-5-1")
+
+check("posture premium", g.posture(g.load_config(premium), "claude-fable-5-1"), "premium")
+check("posture orchestrator", g.posture(g.load_config(orch), "claude-opus-5"), "orchestrator")
+check("posture worker", g.posture(g.load_config(worker), "claude-opus-5"), "worker")
+check("posture disabled", g.posture(g.load_config(disabled), "claude-fable-5-1"), "disabled")
+check("guard premium: shell denied", decision(guard(premium, tr_p, "Bash", {"command": "ls"})), "deny")
+check("guard orch: shell denied", decision(guard(orch, tr_o, "Bash", {"command": "ls"})), "deny")
+check("guard worker: shell allowed", decision(guard(worker, tr_w, "Bash", {"command": "ls"})), None)
+check("guard disabled: shell allowed", decision(guard(disabled, tr_d, "Bash", {"command": "ls"})), None)
+check("guard worker via MODEL_TIER_ORCHESTRATOR=off overrides config",
+      decision(run_hook(GUARD, call(orch, tr_o, "Bash", {"command": "ls"}), {"MODEL_TIER_ORCHESTRATOR": "off"})), None)
+check("guard orch via MODEL_TIER_ORCHESTRATOR=on overrides config",
+      decision(run_hook(GUARD, call(worker, tr_w, "Bash", {"command": "ls"}), {"MODEL_TIER_ORCHESTRATOR": "on"})), "deny")
+check("guard: MODEL_TIER_POLICY=off suspends", decision(run_hook(GUARD, call(premium, tr_p, "Bash", {"command": "ls"}), {"MODEL_TIER_POLICY": "off"})), None)
+check("guard: enabled false suspends", decision(guard(*make_repo({"enabled": False}, "claude-fable-5-1"), "Bash", {"command": "ls"})), None)
+r = guard(orch, tr_o, "Bash", {"command": "git commit -am x"})
+check("guard orch: git denial names the steward with the resolved id", "model-tier-policy:git-steward" in reason(r))
+check("guard: tier denial footer separates tier from authorization", "confers no permission" in reason(r))
+
+# ------------------------------------------------------------------------------------------------------- guard: write gates
+for root, tr, label in ((premium, tr_p, "premium"), (orch, tr_o, "orch")):
+    check("guard %s: Write under paths.plans allowed" % label, decision(guard(root, tr, "Write", {"file_path": ".claude/plans/x.plan.md"})), None)
+    check("guard %s: Write under paths.decisions allowed" % label, decision(guard(root, tr, "Write", {"file_path": ".claude/decisions/0001.md"})), None)
+    check("guard %s: Write under paths.reviews allowed" % label, decision(guard(root, tr, "Write", {"file_path": ".claude/reviews/pr-1.md"})), None)
+    check("guard %s: Edit operating rules allowed" % label, decision(guard(root, tr, "Edit", {"file_path": ".claude/agent-operating-rules.md"})), None)
+    check("guard %s: write_allowed suffix glob allowed anywhere in the repo" % label, decision(guard(root, tr, "Write", {"file_path": "docs/x.tracker.md"})), None)
+    check("guard %s: Edit source denied" % label, decision(guard(root, tr, "Edit", {"file_path": "src/main.py"})), "deny")
+    check("guard %s: write outside the repo denied (containment)" % label, decision(guard(root, tr, "Write", {"file_path": "../x.plan.md"})), "deny")
+custom, tr_c = make_repo({"paths": {"plans": "docs/plans"}}, "claude-fable-5-1")
+check("guard: configured paths.plans derives its write glob", decision(guard(custom, tr_c, "Write", {"file_path": "docs/plans/x.md"})), None)
+
+# -------------------------------------------------------------------------------------------------------- guard: Agent gate
+check("guard premium: unpinned spawn denied", decision(guard(premium, tr_p, "Agent", {"subagent_type": "general-purpose"})), "deny")
+check("guard premium: pinned spawn allowed", decision(guard(premium, tr_p, "Agent", {"subagent_type": "general-purpose", "model": "opus"})), None)
+check("guard premium: Explore unpinned allowed", decision(guard(premium, tr_p, "Agent", {"subagent_type": "Explore"})), None)
+check("guard premium: fork unpinned denied", decision(guard(premium, tr_p, "Agent", {"subagent_type": "fork"})), "deny")
+check("guard premium: definition-pinned plugin role allowed unpinned", decision(guard(premium, tr_p, "Agent", {"subagent_type": "model-tier-policy:executor"})), None)
+check("guard orch (worker tier): unpinned spawn allowed", decision(guard(orch, tr_o, "Agent", {"subagent_type": "general-purpose"})), None)
+mismatch, tr_m = make_repo({"models": {"executor": "sonnet"}}, "claude-fable-5-1")
+r = guard(mismatch, tr_m, "Agent", {"subagent_type": "model-tier-policy:executor"})
+check("guard: pin that disagrees with models denied with the re-issue text", decision(r) == "deny" and 'model="sonnet"' in reason(r))
+check("guard premium: Workflow denied", decision(guard(premium, tr_p, "Workflow", {})), "deny")
+check("guard orch: Workflow denied", decision(guard(orch, tr_o, "Workflow", {})), "deny")
+
+# ------------------------------------------------------------------------------------------------------ guard: GitHub tools
+for root, tr, label in ((premium, tr_p, "premium"), (orch, tr_o, "orch")):
+    for tool in ("mcp__github__create_pull_request", "mcp__github__enable_pr_auto_merge", "mcp__github__pull_request_review_write"):
+        check("guard %s: %s denied" % (label, tool), decision(guard(root, tr, tool, {})), "deny")
+    for tool in ("mcp__github__issue_write", "mcp__github__add_issue_comment", "mcp__github__sub_issue_write"):
+        check("guard %s: %s allowed (ticket tool)" % (label, tool), decision(guard(root, tr, tool, {})), None)
+    for tool in ("mcp__Claude_Code_Remote__subscribe_pr_activity", "mcp__Claude_Code_Remote__send_later"):
+        check("guard %s: %s allowed" % (label, tool), decision(guard(root, tr, tool, {})), None)
+
+# ------------------------------------------------------------------------------------------------- guard: premium read budget
+sess = "b" + RUN
+for i in range(8):
+    guard(premium, tr_p, "Read", {"file_path": "src/main.py"}, session=sess)
+r = guard(premium, tr_p, "Read", {"file_path": "src/main.py"}, session=sess)
+check("guard premium: ninth read of a turn denied", decision(r) == "deny" and "9/8" in reason(r))
+check("guard premium: read denial names the scout", "model-tier-policy:scout" in reason(r))
+check("guard premium: budget resets on a new prompt_id", decision(guard(premium, tr_p, "Read", {"file_path": "src/main.py"}, session=sess, prompt="p2")), None)
+
+# ------------------------------------------------------------------------------------------------ guard: ids resolve per install
+local, tr_l = make_repo({}, "claude-fable-5-1", agents=True)
+r = guard(local, tr_l, "Bash", {"command": "ls"})
+check("guard: denial spells the bare id when .claude/agents ships the role", 'subagent_type="executor"' in reason(r))
+r = guard(premium, tr_p, "Bash", {"command": "ls"})
+check("guard: denial spells the namespaced id when the plugin serves the role", 'subagent_type="model-tier-policy:executor"' in reason(r))
+
+# -------------------------------------------------------------------------------------------------- guard: authorization (#30)
+for root, tr, label in ((premium, tr_p, "premium"), (orch, tr_o, "orch"), (worker, tr_w, "worker"), (disabled, tr_d, "disabled")):
+    r = guard(root, tr, "mcp__github__merge_pull_request", {"pullNumber": 1})
+    check("auth %s: merge_pull_request denied as project policy" % label, decision(r) == "deny" and "not a tier question" in reason(r))
+    check("auth %s: push to main denied" % label, decision(guard(root, tr, "Bash", {"command": "git push origin main"})), "deny")
+r = guard(worker, tr_w, "mcp__github__merge_pull_request", {}, agent_id="a1", agent_type="executor")
+check("auth: subagent merge denied — authorization precedes the exemption", decision(r) == "deny" and "every agent" in reason(r))
+check("auth: subagent gh pr merge denied", decision(guard(worker, tr_w, "Bash", {"command": "gh pr merge 5 --squash"}, agent_id="a1")), "deny")
+check("auth: subagent feature push allowed", decision(guard(worker, tr_w, "Bash", {"command": "git push -u origin feat/x"}, agent_id="a1")), None)
+check("auth: HEAD:master push denied", decision(guard(worker, tr_w, "Bash", {"command": "git push origin HEAD:master"})), "deny")
+check("auth: main-fix branch push allowed", decision(guard(worker, tr_w, "Bash", {"command": "git push origin main-fix"})), None)
+session_cfg, tr_s = make_repo({"authorization": {"merge_authority": "session"}}, "claude-opus-5")
+check("auth: merge_authority session allows the merge", decision(guard(session_cfg, tr_s, "mcp__github__merge_pull_request", {})), None)
+bad_cfg, tr_b = make_repo({"authorization": {"merge_authority": None}}, "claude-opus-5")
+check("auth: malformed merge_authority falls back to owner", decision(guard(bad_cfg, tr_b, "mcp__github__merge_pull_request", {})), "deny")
+check("auth: MODEL_TIER_POLICY=off suspends it", decision(run_hook(GUARD, call(worker, tr_w, "mcp__github__merge_pull_request", {}), {"MODEL_TIER_POLICY": "off"})), None)
+
+# ---------------------------------------------------------------------------------------------- guard: the exemption rule (#30)
+check("exempt: agent_id -> Edit allowed on the orchestrator posture", decision(guard(orch, tr_o, "Edit", {"file_path": "src/main.py"}, agent_id="a1", agent_type="executor")), None)
+check("exempt: agent_type alone (a --agent main session) is gated", decision(guard(orch, tr_o, "Edit", {"file_path": "src/main.py"}, agent_type="orchestrator")), "deny")
+check("exempt: agent_id alone suffices", decision(guard(orch, tr_o, "Bash", {"command": "make"}, agent_id="a2")), None)
+
+# ------------------------------------------------------------------------------------------ guard: orchestrator reads (#30)
+r = guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"})
+check("orch Read tracker: allowed with limit clamped", decision(r) == "allow" and (updated(r) or {}).get("limit") == 200)
+r = guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md", "limit": 40})
+check("orch Read with a smaller limit: input untouched", updated(r) is None or updated(r).get("limit") == 40)
+check("orch Read operating rules allowed", decision(guard(orch, tr_o, "Read", {"file_path": ".claude/agent-operating-rules.md"})), "allow")
+check("orch Read decisions allowed", decision(guard(orch, tr_o, "Read", {"file_path": ".claude/decisions/0001.md"})), "allow")
+r = guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.plan.md"})
+check("orch Read plan denied, naming the architect's brief", decision(r) == "deny" and "architect" in reason(r))
+r = guard(orch, tr_o, "Read", {"file_path": "src/main.py"})
+check("orch Read source denied, naming the scout", decision(r) == "deny" and "scout" in reason(r).lower())
+check("orch Read receipts path denied as a handle", "handle" in reason(guard(orch, tr_o, "Read", {"file_path": ".claude/receipts/s/x.md"})))
+check("orch Read outside the repo denied", decision(guard(orch, tr_o, "Read", {"file_path": "../../etc/hosts.tracker.md"})), "deny")
+check("orch Grep denied", "investigation" in reason(guard(orch, tr_o, "Grep", {"pattern": "x"})))
+check("orch WebFetch denied", decision(guard(orch, tr_o, "WebFetch", {"url": "https://x"})), "deny")
+check("orch Glob inside plans allowed", decision(guard(orch, tr_o, "Glob", {"pattern": ".claude/plans/*.tracker.md"})), None)
+check("orch Glob over src denied", decision(guard(orch, tr_o, "Glob", {"pattern": "src/**/*.py"})), "deny")
+check("orch pull_request_read get_diff denied", decision(guard(orch, tr_o, "mcp__github__pull_request_read", {"method": "get_diff"})), "deny")
+check("orch get_commit denied", decision(guard(orch, tr_o, "mcp__github__get_commit", {})), "deny")
+check("orch pull_request_read get allowed", decision(guard(orch, tr_o, "mcp__github__pull_request_read", {"method": "get"})), None)
+sess = "o" + RUN
+guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"}, session=sess)
+guard(orch, tr_o, "mcp__github__issue_read", {"method": "get"}, session=sess)
+r = guard(orch, tr_o, "mcp__github__pull_request_read", {"method": "get"}, session=sess)
+check("orch budget: third state read of a turn denied", decision(r) == "deny" and "3/2" in reason(r))
+check("orch budget: resets on a new prompt_id", decision(guard(orch, tr_o, "Read", {"file_path": ".claude/plans/p.tracker.md"}, session=sess, prompt="p2")), "allow")
+check("orch budget: ticket writes not counted", decision(guard(orch, tr_o, "mcp__github__issue_write", {}, session=sess, prompt="p2")), None)
+check("orch: Edit tracker allowed", decision(guard(orch, tr_o, "Edit", {"file_path": ".claude/plans/p.tracker.md"})), None)
+check("premium: Read source still allowed (budgeted, not path-gated)", decision(guard(premium, tr_p, "Read", {"file_path": "src/main.py"})), None)
+check("premium: Grep still allowed", decision(guard(premium, tr_p, "Grep", {"pattern": "x"})), None)
+
+# ------------------------------------------------------------------------------------------------------- reminder hook
+fresh, tr_f = make_repo({"orchestrator_mode": True}, None)
+sess = "f" + RUN
+pend = context(fresh, tr_f, "SessionStart", sess, source="startup")
+check("reminder: no assistant entry at SessionStart -> pending anchor", "posture pending" in pend and unfilled(pend) == [])
+pend2 = context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p1")
+check("reminder: first prompt still unknown -> pending", "posture pending" in pend2)
+open(tr_f, "w").write(json.dumps({"type": "assistant", "message": {"model": "claude-opus-5"}}) + "\n")
+t1 = context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p2")
+check("reminder: first known-model firing is turn 1, the full fragment", "orchestrator session" in t1 and "Rule of the turn" not in t1)
+briefs = [context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p%d" % i) for i in range(3, 12)]
+check("reminder: turns 2-10 brief", all("Rule of the turn:" in b for b in briefs))
+check("reminder: briefs carry no unfilled placeholders", all(unfilled(b) == [] for b in briefs))
+check("reminder: consecutive briefs differ (rotating clause, turn number)", all(a != b for a, b in zip(briefs, briefs[1:])))
+t11 = context(fresh, tr_f, "UserPromptSubmit", sess, prompt="p12")
+check("reminder: turn 11 full again", "state reads per turn" in t11)
+dd = context(disabled, tr_d, "UserPromptSubmit", "d" + RUN, prompt="p1")
+check("reminder: premium under orchestrator_mode -> DISABLED notice", "DISABLED" in dd)
+c1 = context(fresh, tr_f, "SessionStart", sess, source="compact")
+check("reminder: SessionStart(compact) -> compaction fragment first", c1.startswith("[model tier policy — COMPACTION BOUNDARY") and "unverified" in c1)
+c2 = context(fresh, tr_f, "PostCompact", sess, trigger="auto")
+check("reminder: PostCompact right after -> anchor without a second compaction fragment", "COMPACTION BOUNDARY" not in c2 and "orchestrator session" in c2)
+sw = context(fresh, tr_f, "PostModelSwitch", sess, from_model="claude-opus-5", to_model="claude-fable-5-1")
+check("reminder: PostModelSwitch renders for to_model", "DISABLED" in sw and "claude-fable-5-1" in sw)
+pb = context(premium, tr_p, "UserPromptSubmit", "q" + RUN, prompt="p1")
+check("reminder: premium full fragment names the receipt contract", "receipt" in pb and unfilled(pb) == [])
+# two installed copies firing on one event inject once
+dup = tmp("dup")
+shutil.copytree(HOOKS, os.path.join(dup, "hooks"), ignore=shutil.ignore_patterns("__pycache__"))
+twin = os.path.join(dup, "hooks", "model_tier_context.py")
+sess2 = "t" + RUN
+first = context(fresh, tr_f, "UserPromptSubmit", sess2, prompt="x1")
+second = context(fresh, tr_f, "UserPromptSubmit", sess2, prompt="x1", script=twin)
+check("reminder: a second installed copy injects nothing for the same event", bool(first) and second == "")
+fresh2, tr_f2 = make_repo({"orchestrator_mode": True}, None)
+sess3 = "u" + RUN
+pa = context(fresh2, tr_f2, "SessionStart", sess3, source="startup")
+pb2 = context(fresh2, tr_f2, "SessionStart", sess3, source="startup", script=twin)
+check("reminder: the pending anchor is de-duplicated across copies too", "posture pending" in pa and pb2 == "")
+# missing fragment -> fallback line, never silence
+broken = tmp("broken")
+shutil.copytree(HOOKS, os.path.join(broken, "hooks"), ignore=shutil.ignore_patterns("__pycache__"))
+os.remove(os.path.join(broken, "hooks", "context", "orchestrator.md"))
+fb = context(orch, tr_o, "SessionStart", "m" + RUN, source="startup", script=os.path.join(broken, "hooks", "model_tier_context.py"))
+check("reminder: missing fragment -> one-line fallback", "reminder fragments missing" in fb)
+
+# --------------------------------------------------------------------------------------------------------- receipt hook
+LONG = "x" * 3000
+def stop(root, tr, text, active=False):
+    return {"cwd": root, "transcript_path": tr, "hook_event_name": "SubagentStop", "session_id": "r" + RUN,
+            "stop_hook_active": active, "agent_id": "agent-1", "agent_type": "model-tier-policy:executor", "last_assistant_message": text}
+r = run_hook(RECEIPT, stop(orch, tr_o, LONG))
+check("receipt: SubagentStop over the cap blocks once with the receipt instruction", (r or {}).get("decision") == "block" and "outcome, object, evidence" in (r or {}).get("reason", ""))
+filed = os.path.join(orch, ".claude", "receipts", "r" + RUN)
+check("receipt: the full text is filed under paths.receipts", os.path.isdir(filed) and any(open(os.path.join(filed, f)).read().endswith(LONG) for f in os.listdir(filed)))
+check("receipt: under the cap -> silent", run_hook(RECEIPT, stop(orch, tr_o, "short")), None)
+check("receipt: stop_hook_active -> never a second block", run_hook(RECEIPT, stop(orch, tr_o, LONG, active=True)), None)
+check("receipt: worker posture -> not capped", run_hook(RECEIPT, stop(worker, tr_w, LONG)), None)
+post = {"cwd": orch, "transcript_path": tr_o, "hook_event_name": "PostToolUse", "session_id": "r" + RUN, "tool_name": "Agent",
+        "tool_input": {"subagent_type": "executor"}, "tool_response": LONG, "tool_use_id": "toolu_1"}
+r = run_hook(RECEIPT, post)
+hso = (r or {}).get("hookSpecificOutput", {})
+check("receipt: PostToolUse backstop cuts a string return and says where the full text is", "receipt cap" in hso.get("additionalContext", "") and isinstance(hso.get("updatedToolOutput"), str))
+post["tool_response"] = {"content": LONG, "status": "ok"}
+hso = (run_hook(RECEIPT, post) or {}).get("hookSpecificOutput", {})
+check("receipt: PostToolUse keeps a dict's shape", isinstance(hso.get("updatedToolOutput"), dict) and hso["updatedToolOutput"].get("status") == "ok")
+zero, tr_z = make_repo({"orchestrator_mode": True, "return_cap_chars": 0}, "claude-opus-5")
+check("receipt: return_cap_chars 0 disables", run_hook(RECEIPT, stop(zero, tr_z, LONG)), None)
+
+# ------------------------------------------------------------------------------------------------------------- installer
+def installer(target, *args, env_extra=None, cwd=None, script=INSTALL):
+    env = dict(os.environ)
+    env["HOME"] = os.path.join(SCRATCH, "home")
+    os.makedirs(env["HOME"], exist_ok=True)
+    if env_extra:
+        env.update(env_extra)
+    return subprocess.run([sys.executable, script, "--target", target] + list(args), capture_output=True, text=True, env=env, cwd=cwd)
+
+cfg_dir = tmp("cfg")
+cache = os.path.join(cfg_dir, "plugins", "cache", "claude-skills", "model-tier-policy")
+version = json.load(open(os.path.join(PLUGIN, ".claude-plugin", "plugin.json")))["version"]
+cached = os.path.join(cache, version)
+shutil.copytree(PLUGIN, cached, ignore=shutil.ignore_patterns("__pycache__"))
+cached_install = os.path.join(cached, "skills", "model-tier-policy", "references", "install.py")
+empty = tmp("empty")
+out = installer(empty, script=cached_install).stdout
+cfg_path = os.path.join(empty, ".claude", "model-tier-policy.json")
+check("installer (cache-shaped path): files-only install seeds exactly the three keys", sorted(json.load(open(cfg_path))) == ["bar_command", "orchestrator_mode", "paths"])
+check("installer: no hook or agent copies in files-only mode", not os.path.exists(os.path.join(empty, ".claude", "hooks")) and not os.path.exists(os.path.join(empty, ".claude", "agents")))
+stamp = open(os.path.join(empty, ".claude", "model-tier-policy.version")).read()
+check("installer: stamp names the marketplace as source", "source: claude-skills marketplace" in stamp)
+out2 = installer(empty, script=cached_install).stdout
+file_lines = [line for line in out2.splitlines() if line.startswith("  ") and "settings.json" not in line]
+check("installer: second run reports keep for every file line", bool(file_lines) and all(line.strip().startswith("keep") for line in file_lines))
+check("installer: second run merges settings.json with nothing removed", any("settings.json" in line and "0 hook entries removed" in line for line in out2.splitlines()))
+check("installer: unchanged stamp left alone", open(os.path.join(empty, ".claude", "model-tier-policy.version")).read() == stamp)
+h1 = subprocess.run([sys.executable, cached_install, "--print-hash"], capture_output=True, text=True).stdout.split()[-1]
+os.makedirs(os.path.join(cached, ".in_use")); open(os.path.join(cached, ".in_use", "4242"), "w").write("")
+h2 = subprocess.run([sys.executable, cached_install, "--print-hash"], capture_output=True, text=True).stdout.split()[-1]
+check("installer: --print-hash identical with and without .in_use/<pid>", h1, h2)
+rule = os.path.join(empty, ".claude", "rules", "coordination", "state-discipline.md")
+open(rule, "a").write("\nlocal edit\n")
+out3 = installer(empty, script=cached_install).stdout
+check("installer: an edited seeded rule reports drift and writes .new", "drift" in out3 and os.path.exists(rule + ".new"))
+open(rule, "w").write(open(os.path.join(REFS, "rules", "coordination", "state-discipline.md")).read())
+installer(empty, script=cached_install)
+check("installer: .new removed once the copies match again", not os.path.exists(rule + ".new"))
+json.dump({"orchestrator_mode": False, "read_budget": 8, "write_allowed": ["**/*.plan.md"]}, open(cfg_path, "w"))
+out4 = installer(empty, "--dry-run", script=cached_install).stdout
+check("installer: a key restating a default is noted", "restates the shipped default" in out4)
+check("installer: a list member missing from DEFAULTS is noted", "member" in out4 and "write_allowed" in out4)
+full = tmp("full")
+os.makedirs(os.path.join(full, ".claude"))
+json.dump({"models": {"executor": "sonnet"}}, open(os.path.join(full, ".claude", "model-tier-policy.json"), "w"))
+installer(full, "--full")
+exe = os.path.join(full, ".claude", "agents", "executor.md")
+check("installer --full: configured model baked into the agent copy", os.path.exists(exe) and "\nmodel: sonnet\n" in open(exe).read())
+out5 = installer(full, "--full").stdout
+check("installer --full: re-run reports keep for the rendered agent copy", any("keep" in line and "executor.md" in line for line in out5.splitlines()))
+hook_copy = os.path.join(full, ".claude", "hooks", "model_tier_guard.py")
+os.chmod(hook_copy, 0o644)
+installer(full, "--full")
+check("installer: a hook copy that lost its exec bit is executable again after a keep", bool(os.stat(hook_copy).st_mode & stat.S_IXUSR))
+check("installer: receipt hook copied in --full mode", os.path.exists(os.path.join(full, ".claude", "hooks", "model_tier_receipt.py")))
+settings = json.load(open(os.path.join(full, ".claude", "settings.json")))
+check("installer: settings wire SubagentStop, PostToolUse, and PostModelSwitch", all(k in settings.get("hooks", {}) for k in ("SubagentStop", "PostToolUse", "PostModelSwitch")))
+env_cache = {"CLAUDE_CONFIG_DIR": cfg_dir}
+check("installer --cache-status: current when the stamp matches the newest complete copy", installer(empty, "--cache-status", env_extra=env_cache).returncode, 0)
+open(os.path.join(empty, ".claude", "model-tier-policy.version"), "w").write("model-tier-policy 99.0.0\ncontent: abc\nsource: claude-skills marketplace\n")
+check("installer --cache-status: stale when the stamp is ahead of every cached copy", installer(empty, "--cache-status", env_extra=env_cache).returncode, 1)
+check("installer --cache-status: missing without a cache", installer(empty, "--cache-status", env_extra={"CLAUDE_CONFIG_DIR": tmp("nocache")}).returncode, 2)
+check("installer --cache-status: unknown without a stamp", installer(tmp("nostamp"), "--cache-status", env_extra=env_cache).returncode, 3)
+
+# ------------------------------------------------------------------------------------- the remote session-start snippet
+# The snippet in SKILL.md is what a consuming repo copies verbatim, so it is exercised here with a shim `claude` on PATH
+# and a fabricated cache, under `set -o pipefail` (the old gate misfired under it).
+skill_text = open(os.path.join(PLUGIN, "skills", "model-tier-policy", "SKILL.md"), encoding="utf-8").read()
+snip_start = skill_text.index("#!/usr/bin/env bash\n# SessionStart, best-effort: bring the model-tier-policy plugin")
+snippet = skill_text[snip_start:skill_text.index("```", snip_start)]
+lab = tmp("snippet")
+shim_dir = os.path.join(lab, "bin")
+os.makedirs(shim_dir)
+open(os.path.join(shim_dir, "claude"), "w").write(
+    "#!/usr/bin/env bash\n"
+    "echo \"$*\" >>\"$SHIM_LOG\"\n"
+    "case \"$1 $2\" in\n"
+    "  'plugin list') printf '%s\\n' \"${SHIM_LISTING:-}\" ;;\n"
+    "  'plugin update') exit \"${SHIM_UPDATE_RC:-0}\" ;;\n"
+    "esac\n"
+    "exit 0\n")
+os.chmod(os.path.join(shim_dir, "claude"), 0o755)
+script = os.path.join(lab, "ensure.sh")
+open(script, "w").write("set -o pipefail\n" + snippet)
+
+
+def snippet_run(label, stamp_version, listing, update_rc=0, with_cache=True):
+    home = tmp("snip-home-" + label)
+    repo = tmp("snip-repo-" + label)
+    os.makedirs(os.path.join(repo, ".claude"))
+    json.dump({"extraKnownMarketplaces": {"claude-skills": {"source": {"source": "github", "repo": "BinaryInfinityDev/claude-skills"}}}},
+              open(os.path.join(repo, ".claude", "settings.json"), "w"))
+    if with_cache:
+        shutil.copytree(cached, os.path.join(home, ".claude", "plugins", "cache", "claude-skills", "model-tier-policy", version),
+                        ignore=shutil.ignore_patterns("__pycache__", ".in_use"))
+    if stamp_version:
+        open(os.path.join(repo, ".claude", "model-tier-policy.version"), "w").write(
+            "model-tier-policy %s\ncontent: %s\nsource: claude-skills marketplace\n" % (stamp_version, h1))
+    log = os.path.join(lab, "shim-%s.log" % label)
+    env = dict(os.environ, HOME=home, PATH=shim_dir + os.pathsep + os.environ.get("PATH", ""), SHIM_LOG=log,
+               SHIM_LISTING=listing, SHIM_UPDATE_RC=str(update_rc), MODEL_TIER_POLICY_AUTOINSTALL="1", TMPDIR=lab)
+    env.pop("CLAUDE_CONFIG_DIR", None)
+    proc = subprocess.run(["bash", script], cwd=repo, capture_output=True, text=True, env=env)
+    calls = open(log).read() if os.path.exists(log) else ""
+    return proc, calls
+
+
+proc, calls = snippet_run("current", version, "  > model-tier-policy@claude-skills")
+check("snippet: current + enabled -> no install, no update, exit 0, silent stdout", proc.returncode == 0 and proc.stdout == "" and "install" not in calls and "update" not in calls)
+proc, calls = snippet_run("unlisted", version, "  > model-tier-policy-extras@claude-skills")
+check("snippet: current cache but not enabled -> install", "plugin install model-tier-policy@claude-skills" in calls and "update" not in calls)
+proc, calls = snippet_run("stale", "99.0.0", "")
+check("snippet: stale -> marketplace add, update on both scopes, no install", "plugin marketplace add" in calls and calls.count("plugin update model-tier-policy@claude-skills --scope") == 2 and "plugin install" not in calls)
+proc, calls = snippet_run("nocache", version, "", update_rc=1, with_cache=False)
+check("snippet: no cache and update refused -> install", "plugin install model-tier-policy@claude-skills" in calls and proc.returncode == 0)
+proc, calls = snippet_run("nostamp", None, "")
+check("snippet: no stamp -> nothing changed, exit 0", proc.returncode == 0 and "install" not in calls and "update" not in calls)
+home_off = tmp("snip-off")
+proc = subprocess.run(["bash", script], cwd=home_off, capture_output=True, text=True, env=dict(os.environ, HOME=home_off, TMPDIR=lab))
+check("snippet: marker unset -> inert", proc.returncode == 0 and proc.stdout == "")
+
+# ------------------------------------------------------------------------------------------------------------ sync checks
+for rel in ("build-discipline/worktree-builds.md", "coordination/coordination-artifacts.md",
+            "coordination/state-discipline.md", "coordination/multi-agent-hygiene.md"):
+    a = open(os.path.join(ROOT, "rules", rel), "rb").read()
+    b = open(os.path.join(REFS, "rules", rel), "rb").read()
+    check("rules: %s byte-identical to the plugin copy" % rel, a == b)
+check("rules: semi-linear-history byte-identical to .claude/rules",
+      open(os.path.join(ROOT, "rules", "git-etiquette", "semi-linear-history.md"), "rb").read()
+      == open(os.path.join(ROOT, ".claude", "rules", "git-etiquette", "semi-linear-history.md"), "rb").read())
+plugin_events = set(json.load(open(os.path.join(HOOKS, "hooks.json")))["hooks"])
+snippet_events = set(json.load(open(os.path.join(REFS, "settings-snippet.json")))["hooks"])
+check("hooks.json and settings-snippet.json wire the same events", plugin_events, snippet_events)
+
+shutil.rmtree(SCRATCH, ignore_errors=True)
+print("check-hooks: %d cases, %d failed" % (count[0], len(failures)))
+for line in failures:
+    print("  FAIL " + line)
+sys.exit(1 if failures else 0)

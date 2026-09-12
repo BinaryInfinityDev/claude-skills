@@ -8,8 +8,14 @@ call as a delegation.
 Design notes:
   - There is no $CLAUDE_MODEL env var and hook input does not carry the model, so the live model is read from the
     session transcript: the last non-sidechain assistant entry's `message.model`.
-  - Tool calls made inside a subagent carry `agent_id`/`agent_type` in the payload. Those are skipped entirely, so an
-    Opus executor is never blocked by a policy aimed at its Fable parent.
+  - Tool calls made inside a subagent carry `agent_id` in the payload — the hooks reference: "present only when the
+    hook fires inside a subagent call". Those are skipped by the tier gates, so an Opus executor is never blocked by
+    a policy aimed at its Fable parent. `agent_type` is not proof of a subagent: it is also set for a main session
+    launched with `claude --agent orchestrator`, and that session is exactly the one the orchestrator posture exists
+    to gate (#30).
+  - The authorization gate is not a tier gate. It runs before the subagent exemption and on every posture, because it
+    answers a different question — whether the action is permitted at all, by project policy — and a coordinator that
+    cannot merge must not be able to delegate the merge to an executor that can (#31).
   - Every failure path allows the call. A guardrail that bricks a session on an unparseable transcript is worse than
     one that occasionally misses.
 """
@@ -27,6 +33,40 @@ DEFAULTS = {
     "read_budget": 8,
     "reminder_interval": 10,  # consumed by model_tier_context.py, which shares this loader
     "orchestrator_mode": False,
+    # The orchestrator's direct reads, by volume rather than by call: a few small state reads per turn, each capped
+    # in lines, over the tracker and the constants only. Everything else it wants to know is a dispatch. A GitHub
+    # response can outweigh eight tracker reads, so the state-read tools share the same small budget (#30).
+    "orchestrator_read_budget": 2,
+    "orchestrator_read_lines": 200,
+    # Repo-relative globs the orchestrator posture may Read, beyond what `paths` derives (the operating-rules file and
+    # decisions/** are added from the configured paths). The plan and the addendum are deliberately absent: the
+    # coordinator dispatches from tracker rows and never opens the plan.
+    "orchestrator_read_allowed": ["**/*.tracker.md"],
+    # Investigation tools the orchestrator posture never gets: the answer to any of these is a scout's brief.
+    "orchestrator_investigation_denied": [
+        r"^(Grep|WebFetch|WebSearch|NotebookRead)$",
+        r"^mcp__github__(get_commit|list_commits|search_code|get_file_contents|actions_|get_job_logs|get_check_run$)",
+    ],
+    # GitHub reads that return state rather than content — allowed on the orchestrator posture, but budgeted.
+    "orchestrator_state_reads": [
+        r"^mcp__github__(issue_read|pull_request_read|list_issues|list_pull_requests|search_issues"
+        r"|search_pull_requests)$"
+    ],
+    # Consumed by model_tier_receipt.py: the size past which a subagent's return is filed and cut down to a receipt.
+    "return_cap_chars": 1500,
+    # Who may merge. Authorization is project policy, kept outside the orchestration policy on purpose: it is read
+    # from this file, never from what a session remembers, and it binds every agent in the session, subagents
+    # included. "owner" (the default) denies merging and auto-merge to the session entirely; "session" lets it.
+    "authorization": {
+        "merge_authority": "owner",
+        "merge_tools": [r"^mcp__github__(merge_pull_request|enable_pr_auto_merge|disable_pr_auto_merge)$"],
+        "merge_commands": [
+            r"\bgh\s+pr\s+merge\b",
+            r"\bgh\s+api\b.*/merge\b",
+            r"\bgit\s+push\b.*\s(main|master)(\s|$)",
+            r"\bgit\s+push\b.*:(main|master)(\s|$)",
+        ],
+    },
     # Tools a coordinating session may use even though they mutate external state — on the premium posture as much
     # as the orchestrator one, because tickets are the plan's home on either. The key's name predates that.
     "orchestrator_tools_allowed": [r"^mcp__github__(issue_write|add_issue_comment|sub_issue_write)$"],
@@ -41,6 +81,9 @@ DEFAULTS = {
         "timings": ".claude/build-timings.md",
         "runner_lock": ".claude/build-runner.lock",
         "operating_rules": ".claude/agent-operating-rules.md",
+        # Where the receipt hook files a subagent return that exceeded the cap. A handle for a later reader, never a
+        # coordinator's read: the location is outside the orchestrator's read allowlist by design.
+        "receipts": ".claude/receipts",
     },
     # The model each role runs on. These are the shipped frontmatter pins; a repo overrides per role. At spawn time an
     # explicit `model` argument beats the definition's pin and a plugin's cache is read-only, so the config becomes
@@ -106,7 +149,14 @@ WRITE_TOOLS = {"Edit", "MultiEdit", "Write", "NotebookEdit"}
 
 DENIAL_FOOTER = (
     "[This denial is the model tier policy working as intended, not a broken tool or a misconfigured repo. "
-    "Do not debug the environment or look for a workaround — delegate. The user can suspend the policy with "
+    "Do not debug the environment or look for a workaround — delegate. The guard governs which tier acts, never "
+    "whether an action is permitted: delegating a denied call confers no permission the caller lacks. The user can "
+    "suspend the policy with MODEL_TIER_POLICY=off.]"
+)
+
+AUTHORIZATION_FOOTER = (
+    "[This denial is the repo's authorization policy working as intended — not the tier policy, not a broken tool, "
+    "and not something a delegation gets around: it binds every agent in this session. The user can suspend it with "
     "MODEL_TIER_POLICY=off.]"
 )
 
@@ -115,7 +165,7 @@ def allow():
     sys.exit(0)
 
 
-def deny(reason):
+def deny(reason, footer=DENIAL_FOOTER):
     # The footer matters: without it a denial reads like a broken tool or a misconfigured repo, and the model (or the
     # user watching it) starts debugging the environment instead of delegating.
     print(
@@ -124,7 +174,23 @@ def deny(reason):
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": reason + "\n" + DENIAL_FOOTER,
+                    "permissionDecisionReason": reason + "\n" + footer,
+                }
+            }
+        )
+    )
+    sys.exit(0)
+
+
+def allow_with_input(updated):
+    """Allow the call with its input rewritten — how the orchestrator's read line cap is applied without a denial."""
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "updatedInput": updated,
                 }
             }
         )
@@ -398,31 +464,143 @@ def path_allowed(root, path, globs):
     return any(fnmatch.fnmatch(c, g) for g in globs for c in (relative, "./" + relative))
 
 
+def subagent_call(payload):
+    """True when the tool call was made inside a spawned subagent — the calls the tier gates never touch.
+
+    `agent_id` is set only inside a subagent call. `agent_type` is not the test: a main session launched with
+    `claude --agent orchestrator` carries the agent's name too, and that session is the orchestrator posture's whole
+    purpose (#30).
+    """
+    return bool(payload.get("agent_id"))
+
+
+class locked(object):
+    """Exclusive lock on a state file's sibling `.lock` for the duration of a read-modify-write.
+
+    Claude Code issues parallel tool calls, and every one of them fires this hook, so an unlocked counter lets two
+    reads both see "one left" and both pass. Degrades to no lock where fcntl is unavailable — never to a failure.
+    """
+
+    def __init__(self, path):
+        self.path = path + ".lock"
+        self.handle = None
+
+    def __enter__(self):
+        try:
+            self.handle = open(self.path, "a+")
+            import fcntl
+
+            fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            pass
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.handle is not None:
+                self.handle.close()  # releases the flock
+        except Exception:
+            pass
+        return False
+
+
 def bump_read_count(session_key, turn_key, call_key):
     """Per-turn counter for read-family calls. Resets when the turn changes.
 
     Counts each *tool call* once, not each hook invocation. If the policy is installed at both user and project scope,
     two copies of this guard fire for the same call; without the `call_key` check that would burn the read budget at
-    twice the configured rate.
+    twice the configured rate. The read-modify-write runs under a file lock, because parallel tool calls fire this
+    hook in parallel.
     """
     state_path = os.path.join(tempfile.gettempdir(), "claude-model-tier-%s.json" % re.sub(r"\W", "", session_key)[:64])
-    state = {}
-    try:
-        state = json.loads(open(state_path, encoding="utf-8").read())
-    except Exception:
-        pass
-    if state.get("turn") != turn_key:
-        state = {"turn": turn_key, "count": 0}
-    if call_key and state.get("call") == call_key:
-        return int(state.get("count", 0))  # same tool call, another copy of the hook — already counted
-    state["count"] = int(state.get("count", 0)) + 1
-    state["call"] = call_key
-    try:
-        with open(state_path, "w", encoding="utf-8") as fh:
-            json.dump(state, fh)
-    except Exception:
-        pass
-    return state["count"]
+    with locked(state_path):
+        state = {}
+        try:
+            state = json.loads(open(state_path, encoding="utf-8").read())
+        except Exception:
+            pass
+        if state.get("turn") != turn_key:
+            state = {"turn": turn_key, "count": 0}
+        if call_key and state.get("call") == call_key:
+            return int(state.get("count", 0))  # same tool call, another copy of the hook — already counted
+        state["count"] = int(state.get("count", 0)) + 1
+        state["call"] = call_key
+        try:
+            with open(state_path, "w", encoding="utf-8") as fh:
+                json.dump(state, fh)
+        except Exception:
+            pass
+        return state["count"]
+
+
+def resolved_authorization(cfg):
+    """The authorization block with defaults filled in, and a malformed value falling back to the shipped default —
+    a `merge_authority: null` must read as "owner", never as "anything goes"."""
+    auth = dict(DEFAULTS["authorization"])
+    user = cfg.get("authorization")
+    if isinstance(user, dict):
+        authority = user.get("merge_authority")
+        if isinstance(authority, str) and authority.strip().lower() == "session":
+            auth["merge_authority"] = "session"
+        for key in ("merge_tools", "merge_commands"):
+            value = user.get(key)
+            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                auth[key] = value
+    return auth
+
+
+def check_authorization(cfg, tool, tool_input):
+    """The denial for a merge the repo's authorization policy reserves to the owner, or None.
+
+    Runs for every caller, subagents included, before any tier question is asked. What a compacted session remembers
+    about who approved what never enters into it: the answer comes from the config file alone (#31).
+    """
+    auth = resolved_authorization(cfg)
+    if auth["merge_authority"] == "session":
+        return None
+    hit = None
+    if matches_any(auth["merge_tools"], tool):
+        hit = tool
+    elif tool == "Bash":
+        command = tool_input.get("command")
+        if isinstance(command, str) and matches_any(auth["merge_commands"], command):
+            hit = "this shell command"
+    if not hit:
+        return None
+    return (
+        "Authorization policy: merging is the owner's. `authorization.merge_authority` is \"owner\" in "
+        ".claude/model-tier-policy.json (the default), so %s is denied for every agent in this session — this is "
+        "project policy, not a tier question, and delegating the call confers no permission the caller lacks. A pull "
+        "request is done when it is green, mergeable, and marked ready: stop there, record it in the tracker, and "
+        "report. A repo that wants its sessions to merge sets \"authorization\": {\"merge_authority\": \"session\"}."
+        % hit
+    )
+
+
+def orchestrator_read_globs(cfg):
+    """What the orchestrator posture may Read: the configured allowlist plus the operating-rules file and decisions."""
+    globs = list(cfg_list(cfg, "orchestrator_read_allowed"))
+    paths = resolved_paths(cfg)
+    if paths.get("operating_rules"):
+        globs.append(paths["operating_rules"])
+    decisions = (paths.get("decisions") or "").rstrip("/")
+    if decisions:
+        globs.append(decisions + "/**")
+    return globs
+
+
+def glob_anchor(root, tool_input):
+    """The fixed directory a Glob call enumerates: its `path` joined with the pattern's leading literal segments."""
+    pattern = tool_input.get("pattern")
+    pattern = pattern if isinstance(pattern, str) else ""
+    base = tool_input.get("path")
+    base = base if isinstance(base, str) and base else root
+    literal = []
+    for segment in pattern.replace("\\", "/").split("/"):
+        if any(ch in segment for ch in "*?[{"):
+            break
+        literal.append(segment)
+    return os.path.join(base, *literal) if literal else base
 
 
 def agent_search_bases(root):
@@ -589,6 +767,87 @@ def check_agent_call(root, refs, models, tool_input, inheritance_hazard=True):
     )
 
 
+def orchestrator_reads(root, cfg, refs, models, payload, tool, tool_input):
+    """The orchestrator posture's read surface: settles every read-family and GitHub-read call, or falls through.
+
+    The coordinator's context is its longevity, so what enters it is governed by volume, not by call count: a handful
+    of small state reads per turn — the tracker, the operating rules, a decision, a ticket or PR's state — each Read
+    capped in lines, and nothing that returns content. Plans, addenda, source, logs, diffs, and PR bodies are the
+    scout's, the architect's, or the reviewer's to read and distil (#30).
+    """
+    scout = refs["scout_agent"]
+    scout_model = role_model(models, refs["scout_agent"], "scout")
+    scout_hint = (
+        'Send a scout: Agent(subagent_type="%s", model="%s", prompt=<the question, the paths, and "return findings '
+        'only — no file contents, max 15 lines">).' % (scout, scout_model)
+    )
+
+    method = tool_input.get("method")
+    if matches_any(cfg_list(cfg, "orchestrator_investigation_denied"), tool) or (
+        tool == "mcp__github__pull_request_read" and method in ("get_diff", "get_files", "get_commits")
+    ):
+        deny(
+            "Model tier policy: %s is investigation, and the orchestrator does not investigate — a diff, a log, a "
+            "commit, a file, or a search is a scout's brief, and the answer comes back as a receipt, not as content.\n%s"
+            % (tool if not method else "%s(%s)" % (tool, method), scout_hint)
+        )
+
+    counted = False
+    if tool == "Read":
+        target = tool_input.get("file_path")
+        target = target if isinstance(target, str) else ""
+        globs = orchestrator_read_globs(cfg)
+        if not path_allowed(root, target, globs):
+            owner = (
+                "The plan is dispatched from tracker rows, never read — the architect's brief carries what you need."
+                if re.search(r"\.(plan|addendum)\.md$", target)
+                else "A review comes back as a verdict and a path from the reviewer; the path is a handle, not a read."
+                if "/reviews/" in target.replace(os.sep, "/") or "/receipts/" in target.replace(os.sep, "/")
+                else scout_hint
+            )
+            deny(
+                "Model tier policy: reading %s is not the orchestrator's. Its direct reads are the tracker, the "
+                "operating rules, and decisions (%s); everything else reaches it as a receipt.\n%s"
+                % (target or "that file", ", ".join(globs), owner)
+            )
+        counted = True
+    elif tool == "Glob":
+        plans = (resolved_paths(cfg).get("plans") or "").rstrip("/")
+        if not path_allowed(root, glob_anchor(root, tool_input), [plans, plans + "/**"]):
+            deny(
+                "Model tier policy: the orchestrator enumerates only its plans directory (%s/) — the tracker and plan "
+                "files live there. Anything else is a scout's question.\n%s" % (plans, scout_hint)
+            )
+        counted = True
+    elif matches_any(cfg_list(cfg, "orchestrator_state_reads"), tool):
+        counted = True
+
+    if not counted:
+        return
+
+    budget = cfg_int(cfg, "orchestrator_read_budget")
+    turn_key = payload.get("prompt_id")
+    if budget > 0 and turn_key:
+        session_key = payload.get("session_id") or "session"
+        count = bump_read_count(session_key, turn_key, payload.get("tool_use_id"))
+        if count > budget:
+            deny(
+                "Model tier policy: state-read budget spent (%d/%d this turn) — the orchestrator's context is its "
+                "longevity, and a turn does one thing: reconcile receipts into the tracker, route, or dispatch. "
+                "Dispatch the rest: a steward reconciles rows against their handles, a scout answers questions.\n%s"
+                % (count, budget, scout_hint)
+            )
+
+    if tool == "Read":
+        cap = cfg_int(cfg, "orchestrator_read_lines")
+        limit = tool_input.get("limit")
+        if cap > 0 and not (isinstance(limit, int) and not isinstance(limit, bool) and 0 < limit <= cap):
+            updated = dict(tool_input)
+            updated["limit"] = cap
+            allow_with_input(updated)
+    allow()
+
+
 def main():
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -598,13 +857,24 @@ def main():
     if os.environ.get("MODEL_TIER_POLICY", "").lower() in ("off", "0", "false"):
         allow()
 
-    # Subagent tool calls are already on a delegated tier — never gate them.
-    if payload.get("agent_id") or payload.get("agent_type"):
-        allow()
-
     root = project_dir(payload)
     cfg = load_config(root)
     if not cfg.get("enabled", True):
+        allow()
+
+    tool = payload.get("tool_name") or ""
+    tool_input = payload.get("tool_input") or {}
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+
+    # Authorization first, for every caller: a merge the owner reserved is denied to the coordinator and to any
+    # executor it might dispatch alike. This is the one gate a subagent does not pass through untouched.
+    authorization_denial = check_authorization(cfg, tool, tool_input)
+    if authorization_denial:
+        deny(authorization_denial, AUTHORIZATION_FOOTER)
+
+    # Subagent tool calls are already on a delegated tier — the tier gates never touch them.
+    if subagent_call(payload):
         allow()
 
     model = live_model(payload.get("transcript_path"))
@@ -624,8 +894,6 @@ def main():
         else "running as the orchestrator, which coordinates but does not implement"
     )
 
-    tool = payload.get("tool_name") or ""
-    tool_input = payload.get("tool_input") or {}
     # Every agent id printed below is resolved, never taken from the config verbatim: a plugin-served agent only
     # answers to `model-tier-policy:<role>`, and an instruction the model cannot follow makes the denial look like a
     # broken environment instead of a policy.
@@ -648,6 +916,9 @@ def main():
 
     if matches_any(cfg_list(cfg, "orchestrator_tools_allowed"), tool):
         allow()  # tickets are the plan's home on either posture — coordination's work product, not procedural drift
+
+    if stance == "orchestrator":
+        orchestrator_reads(root, cfg, refs, models, payload, tool, tool_input)
 
     if matches_any(cfg_list(cfg, "procedural_tools_denied"), tool):
         if tool in WRITE_TOOLS:
@@ -708,7 +979,8 @@ def main():
     turn_key = payload.get("prompt_id")
     # No prompt_id means turns cannot be told apart, and a session-keyed counter would never reset — the budget would
     # lock reads out for the whole session after 8 calls. Fail open instead, like every other degraded input here.
-    if budget > 0 and turn_key and matches_any(cfg_list(cfg, "research_tools_allowed"), tool):
+    # The orchestrator posture's reads were settled above, with their own budget.
+    if is_premium and budget > 0 and turn_key and matches_any(cfg_list(cfg, "research_tools_allowed"), tool):
         session_key = payload.get("session_id") or "session"
         count = bump_read_count(session_key, turn_key, payload.get("tool_use_id"))
         if count > budget:

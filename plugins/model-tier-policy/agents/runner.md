@@ -31,6 +31,10 @@ output it already produced.
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 **10 lines or fewer**, or the cap the brief sets:
 
 - How many sites changed, and in which files (paths, counts — not contents)

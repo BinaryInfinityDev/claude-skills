@@ -64,6 +64,10 @@ no GitHub write tools, so you never post the review to the PR yourself; if a tas
 
 ## What to return
 
+Lead with the receipt — `outcome`, `object`, `evidence`, `actor`, `uncertainty`, `next_action`, `details` (a path), as
+the coordination-artifacts rule shapes it: it is what the coordinator acts on, and the receipt hook files anything over
+the cap and asks for it again. The rest of the return, under the cap:
+
 First, **persist the full findings yourself**: write them to `<paths.reviews>/<pr-or-branch>-<round>.md` (default
 `.claude/reviews/`), so the caller hands a path — not your prose — to the fix round and the next review. Then return
 **20 lines or fewer**, or the cap the brief sets:
