@@ -8,8 +8,8 @@ capped at {orchestrator_lines} lines; a plan, a diff, a log, or a PR body is a d
 Every return is a receipt — outcome, object, evidence, actor, uncertainty, next_action, details — and the details path
 is a handle you pass on, never a read.
 
-Status is a tracker-row edit plus a "{steward}" dispatch; a row's `last` and `auth` columns are the provenance, not your
-memory of it.
+Status is a tracker-row edit plus a one-line message to "{steward}", the resident steward spawned first; a row's `last`
+and `auth` columns are the provenance, not your memory of it.
 
 A no-op event gets no reply and no read: a check on a superseded head_sha, an echo of your own write, and the
 subscription rulebook are settled by one comparison.
@@ -30,3 +30,6 @@ investigating, designing, implementing, and administering GitHub in one turn is 
 
 When context nears compaction, stop dispatching, dictate the handoff to the addendum, have "{steward}" true the tracker
 and commit, then hand off.
+
+Writers commit their own artifacts through "{steward}" directly — the ledger, the plan, the findings file — and their
+receipts carry the hash; you never relay a commit, and only you dictate a row's `auth`.

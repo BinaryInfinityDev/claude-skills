@@ -15,6 +15,9 @@ obviously cheaper than restating it.
 - Agent branch naming: `<role>/<slug>-<id>` per the multi-agent-hygiene rule; repo-specific prefixes or exceptions go
   here.
 - Commit and PR conventions beyond the repo's rules files: (anything a brief would otherwise restate)
+- The resident git steward is spawned first, named `steward`. A tracked artifact is committed by messaging it —
+  `commit <path>: <subject>`, plus `mark <row> …` for your own work, never `auth` — and its one-line reply goes in your
+  receipt.
 
 ## Standing constraints
 

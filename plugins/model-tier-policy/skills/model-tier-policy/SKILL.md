@@ -108,13 +108,19 @@ devil's advocate.
   are first-class returns, because an honest "could not tell" costs one re-run while a confident wrong answer costs a
   wrong fix. Project-specific signatures that look like failures but are not — cache poisoning, plugin flakes, coverage
   thresholds — belong in the target repo's `.claude/build-signatures.md`, which the agent reads when present.
-- `git-steward` (Sonnet 5) is the coordinator's git custodian, spawned per invocation and never kept resident. It
-  commits and pushes coordination artifacts (plan, tracker, addendum, decisions, reviews, operating rules, the build
-  timing ledger), whoever wrote them, takes dictated updates ("mark m13 merged as #661" costs the coordinator ten
-  words), reconciles tracker rows against their issue/PR handles, opens or refreshes the PR for a branch it pushed and
-  answers and resolves its review threads from dictated replies, and keeps branches and worktrees tidy. It never touches
-  feature work: artifact paths only, and anything else dirty in the tree is reported, never committed or stashed — the
-  push gate stays intact because the steward is structurally outside it.
+- `git-steward` (Sonnet 5) is the session's resident git custodian: the coordinator spawns it once, named `steward`,
+  before any other dispatch, and resumes it by message. Every role that writes a tracked artifact — the runner's timing
+  ledger, the architect's plan and tracker seed, the reviewer's findings file — commits it by messaging the steward
+  directly and folding its one-line reply into the receipt, so the traffic never passes through the coordinator; the
+  coordinator's own messages to it are dictated updates ("mark m13 merged as #661" costs ten words), reconciliation of
+  tracker rows against their issue/PR handles, PR disposition for a branch it pushed and its review-thread replies, and
+  branch and worktree hygiene. A writer may dictate `state`, `ref`, and `last` for its own work, never `auth` — that is
+  the coordinator's alone, and the steward refuses it from anyone else. One steward per session is the serialization
+  point for git. It never touches feature work: artifact paths only, and anything else dirty in the tree is reported,
+  never committed or stashed — the push gate stays intact because the steward is structurally outside it. The guard does
+  not gate `SendMessage` on any posture. This needs Claude Code 2.1.206 or later, where a subagent with `SendMessage`
+  sees the session's named agents; on an older release, or when no steward was spawned, a writer reports its file as
+  uncommitted and the coordinator dispatches the steward per invocation, as before.
 
 ### What "procedural" means
 
@@ -316,6 +322,12 @@ name an id you can copy verbatim, in either setup. The config keys (`executor_ag
 `architect_agent`, `senior_agent`) stay authoritative for _which_ role is named; they do not carry the namespace.
 
 When you are writing the call yourself and are unsure which applies, `/agents` lists the resolvable ids.
+
+The resident steward is addressed differently after its one spawn:
+`Agent(subagent_type=<the steward id above>, name="steward", …)` once, then `SendMessage` with `to: "steward"` — from
+the coordinator, and from any writer whose tools include `SendMessage`, which sees `steward` in the roster of named
+agents it is given at start (Claude Code 2.1.206 or later). A writer spawned before the steward has no such entry, which
+is why the steward is spawned first.
 
 ---
 
@@ -619,7 +631,8 @@ byte-identical every turn stops being parsed and becomes furniture, and a sessio
 text sat in context (#31). And a compaction gets a fragment of its own, rendered on `SessionStart` with
 `source: "compact"`: provenance is what a summary compresses away, so the first turn after a compaction is told that
 every remembered actor, approval, and precedent is unverified — before it is told anything else. Workers get a short
-form; coordinators get the ledger and the steward.
+form; coordinators get the ledger and the steward, and are told to confirm the steward still answers before the next
+dispatch.
 
 A fresh session's transcript has no assistant entry at `SessionStart` or on its first prompt, so the model — and with it
 the posture — is unknown there. The hook injects a posture-neutral `pending` anchor rather than nothing (the first turn

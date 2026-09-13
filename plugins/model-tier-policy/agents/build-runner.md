@@ -72,16 +72,22 @@ it already produced, and do not decide the fix — results go back to your calle
 The timing ledger — `paths.timings` in `.claude/model-tier-policy.json`, default `.claude/build-timings.md` — is the one
 file you may create or append to in the repo. It is tracked, and the steward commits it: its purpose is to tell a future
 run what normal looks like, and a fresh container has only what git has, so a ledger that dies with the session is no
-ledger. Your append leaves the tree dirty — that is a commit for the steward, never a reason to untrack the file. It
-holds a **common build jobs** index — job name, command, what it covers — and a **runs** table:
-`| timestamp (UTC) | build job | wall-clock |`. Use the index's job names verbatim so the table greps cleanly, and add a
-job to the index the first time you run it. Record completed runs only — success or test failure, both are honest
-durations; a killed or hung run's duration is noise. Report wall-clock total plus any notably slow tasks.
+ledger. Your append leaves the tree dirty — that is a commit for the steward, never a reason to untrack the file. Send
+it yourself: message `steward` — the resident git steward the coordinator spawned before you — with
+`commit <ledger path>: Record <job> run` and, when the brief named a tracker row, `mark <row> built green at <sha>` (or
+failed), and fold its one-line reply into your receipt's `evidence`. Never `auth`. If `steward` is not in your roster (a
+Claude Code before 2.1.206, or none was spawned), leave the ledger dirty, say so in the receipt's `next_action`, and the
+coordinator dispatches the steward. It holds a **common build jobs** index — job name, command, what it covers — and a
+**runs** table: `| timestamp (UTC) | build job | wall-clock |`. Use the index's job names verbatim so the table greps
+cleanly, and add a job to the index the first time you run it. Record completed runs only — success or test failure,
+both are honest durations; a killed or hung run's duration is noise. Report wall-clock total plus any notably slow
+tasks.
 
 ## Hard limits
 
 Writes: the worktree and its build outputs, the log and copied-out artifacts in the temp directory, the lock, and the
-ledger. Nothing else — no source edits, no commits, no pushes. One ref per run, one run at a time.
+ledger. Nothing else — no source edits, no commits of your own, no pushes; a commit is a message to `steward`. One ref
+per run, one run at a time.
 
 ## What to return
 

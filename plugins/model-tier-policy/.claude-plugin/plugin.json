@@ -1,6 +1,6 @@
 {
   "name": "model-tier-policy",
-  "version": "1.8.9",
+  "version": "1.9.2",
   "description": "Split work across model tiers — an Opus 5 orchestrator session coordinates pinned-model agents, Fable 5 plans, Opus 5 / Sonnet 5 execute, with PreToolUse enforcement and a self-updating reminder hook",
   "author": {
     "name": "BinaryInfinityDev"

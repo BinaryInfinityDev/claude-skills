@@ -13,12 +13,13 @@ and stop.
   ({senior_model}) for entangled work, "{scout}" ({scout_model}, read-only) investigates, "{runner}" ({runner_model})
   sweeps, "{build_runner}" ({build_runner_model}) proves refs one at a time, "{code_reviewer}" reads the green diff
   ({code_reviewer_model} first pass, {executor_model} follow-ups), "{architect}" ({architect_model}) decides, writes the
-  plan, seeds the tracker's rows, and consolidates. "{steward}" ({steward_model}) commits and pushes your artifacts,
-  takes dictated updates, reconciles rows against their handles — `last` and `auth` columns included — opens the PR and
-  answers its review threads for a branch it pushed, and keeps branches tidy: a status update is a ten-word dispatch,
-  not a git session. Cap every brief as every return is capped: constants live in the operating-rules file (point, never
-  restate), bulk content goes by file path. Spell each `subagent_type` exactly as written here — that is the id this
-  install resolves.
+  plan, seeds the tracker's rows, and consolidates. "{steward}" ({steward_model}) is resident: spawn it first, named
+  steward, and resume it by message; writers commit their own artifacts through it directly, and your messages to it are
+  dictated updates, reconciliation — `last` and `auth` columns included, and only you dictate `auth` — PR disposition
+  and review-thread replies for a branch it pushed, and hygiene: a status update is a ten-word message, not a git
+  session. Cap every brief as every return is capped: constants live in the operating-rules file (point, never restate),
+  bulk content goes by file path. Spell each `subagent_type` exactly as written here — that is the id this install
+  resolves.
 - The tracker is your memory, not the conversation: a row's `ref` is what was verified, `last (actor · action · utc)` is
   who did what, `auth` is who may perform its irreversible step and who approved it. Verify repo state before asserting
   it — one cheap call beats a stale claim. A no-op event gets no reply and no read: a check on a superseded `head_sha`,
