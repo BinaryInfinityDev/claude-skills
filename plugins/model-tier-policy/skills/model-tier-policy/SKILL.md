@@ -109,12 +109,12 @@ devil's advocate.
   wrong fix. Project-specific signatures that look like failures but are not — cache poisoning, plugin flakes, coverage
   thresholds — belong in the target repo's `.claude/build-signatures.md`, which the agent reads when present.
 - `git-steward` (Sonnet 5) is the coordinator's git custodian, spawned per invocation and never kept resident. It
-  commits and pushes coordination artifacts (plan, tracker, addendum, decisions, reviews, operating rules), takes
-  dictated updates ("mark m13 merged as #661" costs the coordinator ten words), reconciles tracker rows against their
-  issue/PR handles, opens or refreshes the PR for a branch it pushed and answers and resolves its review threads from
-  dictated replies, and keeps branches and worktrees tidy. It never touches feature work: artifact paths only, and
-  anything else dirty in the tree is reported, never committed or stashed — the push gate stays intact because the
-  steward is structurally outside it.
+  commits and pushes coordination artifacts (plan, tracker, addendum, decisions, reviews, operating rules, the build
+  timing ledger), whoever wrote them, takes dictated updates ("mark m13 merged as #661" costs the coordinator ten
+  words), reconciles tracker rows against their issue/PR handles, opens or refreshes the PR for a branch it pushed and
+  answers and resolves its review threads from dictated replies, and keeps branches and worktrees tidy. It never touches
+  feature work: artifact paths only, and anything else dirty in the tree is reported, never committed or stashed — the
+  push gate stays intact because the steward is structurally outside it.
 
 ### What "procedural" means
 
@@ -187,12 +187,16 @@ gets paid for twice.
 The `project-management` plugin's `record-decision` skill, where it is installed, records choices worth preserving
 beyond the task.
 
-Decide deliberately whether plan files are session scratch or committed deliverables. Scratch: add the plans directory
-to `.gitignore`, or every session ends with an untracked-files warning from any tree-cleanliness hook — and add
-`paths.receipts` (default `.claude/receipts/`) the same way, since the receipt hook drops a file there for every return
-it cuts down. Deliverables: point `paths.plans` at the docs tree (`docs/plans/`, say) and let the steward commit them —
-consolidation then publishes the current plan as part of the repo. The installer edits neither `.gitignore` nor `paths`;
-the choice is the repo's.
+Decide deliberately whether plan files are session scratch or committed deliverables, by the one question that sorts
+every `paths` location: does the content have to outlive the session and the machine? A fresh Claude Code Remote
+container has only what git has. Scratch: add the plans directory to `.gitignore`, or every session ends with an
+untracked-files warning from any tree-cleanliness hook — and add `paths.receipts` (default `.claude/receipts/`) and
+`paths.runner_lock` the same way, since the receipt hook drops a file there for every return it cuts down and the lock
+is a PID on one machine. Deliverables: point `paths.plans` at the docs tree (`docs/plans/`, say) and let the steward
+commit them — consolidation then publishes the current plan as part of the repo. The timing ledger (`paths.timings`) is
+a deliverable by that test — its purpose is to tell a future run what normal looks like — and the steward commits it
+whoever appended it; a ledger left dirty by a bar run is a commit, never a reason to untrack it. The installer edits
+neither `.gitignore` nor `paths`; the choice is the repo's.
 
 ### 2a. Stress-test the plan (optional)
 
