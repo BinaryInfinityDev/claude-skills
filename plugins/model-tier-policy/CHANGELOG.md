@@ -20,6 +20,24 @@ entry that settles one of its items says so.
   Code CLI behaviour, not a plugin defect; the skill's remote section says to check `git diff` after a teardown (#16).
 - `build-analyst` is Gradle-first. Maven support is deliberately absent rather than shipped untested (#7).
 
+## 1.9.0 — 2026-09-13 — [#38](https://github.com/BinaryInfinityDev/claude-skills/pull/38)
+
+Closes #37: every interaction routed through the coordinator accrues context there, and the steward round trip was paid
+on every tracked artifact.
+
+- **Changed:** the git steward is resident — spawned once by the coordinator, named `steward`, before any other
+  dispatch, and resumed by message — and every role that writes a tracked artifact commits it by messaging the steward
+  directly, folding the one-line reply into its receipt, so the traffic never passes through the coordinator. The
+  coordinator's own messages to the steward shrink to dictated updates, reconciliation, PR disposition, and hygiene. A
+  writer may dictate `state`, `ref`, and `last` for its own work and never `auth`, which stays the coordinator's alone
+  and is refused from anyone else. One steward per session is the serialization point for git.
+- **Added:** `SendMessage` in the `architect`, `code-reviewer`, and `orchestrator` tool sets; the compaction fragment
+  and the orchestrator role check that the steward still answers and respawn it under the same name; the operating-rules
+  seed names the convention; two check cases pin that the guard does not gate `SendMessage` on either denying posture.
+- Requires Claude Code 2.1.206 or later for a subagent's roster of named agents. On an older release, or with no steward
+  spawned, a writer reports its file as uncommitted and the coordinator dispatches the steward per invocation, as
+  before.
+
 ## 1.8.9 — 2026-09-12 — [#36](https://github.com/BinaryInfinityDev/claude-skills/pull/36)
 
 - **Changed:** what is tracked is decided once, by one test — does the content have to outlive the session and the

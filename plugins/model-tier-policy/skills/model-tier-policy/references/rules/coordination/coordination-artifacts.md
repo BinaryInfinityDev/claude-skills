@@ -91,9 +91,19 @@ asked for the receipt; the file is where a later reader, or a scout, finds the r
 ## The git steward
 
 Committing and pushing coordination artifacts, reconciling tracker rows against their handles, and branch hygiene belong
-to `git-steward` (Sonnet 5), dispatched per invocation and never kept resident. A status update costs the coordinator
-one tracker-row edit and a one-line dispatch, not a git session. The steward never pushes feature work:
-coordination-artifact paths only, and anything else it finds dirty is reported, never committed and never stashed.
+to `git-steward` (Sonnet 5). It is resident: the coordinator spawns it once, named `steward`, before any other dispatch
+— a subagent's roster of addressable agents is a snapshot taken when it starts — and resumes it by message for the rest
+of the session. Every role that writes a tracked artifact commits it by messaging the steward directly
+(`commit <path>: <subject>`, plus the dictated row update when the fact is its own) and folds the one-line reply into
+its receipt, so the traffic never passes through the coordinator, whose own messages to the steward shrink to dictated
+updates, reconciliation, PR disposition, and hygiene — a status update costs one tracker-row edit and one line, not a
+git session. A writer may dictate `state`, `ref`, and `last` for its own work and never `auth`: who may perform an
+irreversible step, and who approved it, is dictated by the coordinator alone, and the steward refuses it from anyone
+else. One steward per session is the serialization point for git. The steward never pushes feature work:
+coordination-artifact paths only, and anything else it finds dirty is reported, never committed and never stashed. Its
+transcript is not its memory — the tree is — so a compaction, its own or the coordinator's, loses nothing. Where no
+steward answers (a Claude Code before 2.1.206, which has no roster, or none spawned), the writer reports the path as
+uncommitted and the coordinator dispatches the steward as before.
 
 ## What is tracked, and why
 
@@ -148,5 +158,6 @@ and only then hand off or compact. The artifacts are the contract that survives;
 And after a compaction — the moment the discipline could not prevent — treat the summary as loss of authority, not as
 memory: every actor, approval, and precedent it reports is unverified until a call or a tracker row confirms it. Reload
 state from the tracker (its `last` and `auth` columns are the ledger), perform no irreversible action and dispatch none
-on the strength of the summary, and have the steward reconcile the rows against their handles before the next dispatch.
-The reminder hook says this on the first turn after a compaction; the discipline is what makes that turn survivable.
+on the strength of the summary, confirm the steward still answers — spawn it again under the same name if not — and have
+it reconcile the rows against their handles before the next dispatch. The reminder hook says this on the first turn
+after a compaction; the discipline is what makes that turn survivable.

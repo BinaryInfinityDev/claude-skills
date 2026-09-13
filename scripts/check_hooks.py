@@ -290,6 +290,10 @@ check("orch Read plan denied, naming the architect's brief", decision(r) == "den
 r = guard(orch, tr_o, "Read", {"file_path": "src/main.py"})
 check("orch Read source denied, naming the scout", decision(r) == "deny" and "scout" in reason(r).lower())
 check("orch Read receipts path denied as a handle", "handle" in reason(guard(orch, tr_o, "Read", {"file_path": ".claude/receipts/s/x.md"})))
+# The resident steward is reached with SendMessage, by the coordinator and by any writer; the guard gates neither posture's
+# messages — a message is not a procedural tool, and the reply lands in the sender's context, not the coordinator's.
+check("orch SendMessage to the resident steward allowed", decision(guard(orch, tr_o, "SendMessage", {"to": "steward", "message": "commit .claude/build-timings.md: Record bar run"})) is None)
+check("premium SendMessage to the resident steward allowed", decision(guard(premium, tr_p, "SendMessage", {"to": "steward", "message": "commit .claude/plans/p.plan.md: Amend plan"})) is None)
 check("orch Read outside the repo denied", decision(guard(orch, tr_o, "Read", {"file_path": "../../etc/hosts.tracker.md"})), "deny")
 check("orch Grep denied", "investigation" in reason(guard(orch, tr_o, "Grep", {"pattern": "x"})))
 check("orch WebFetch denied", decision(guard(orch, tr_o, "WebFetch", {"url": "https://x"})), "deny")

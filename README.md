@@ -13,7 +13,7 @@ instead of copy-and-forget.
 
 | Plugin               | Version                                          | Contents                                                                                        |
 | -------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `model-tier-policy`  | [1.8.9](plugins/model-tier-policy/CHANGELOG.md)  | The tier-policy skill, eleven pinned-model agents, and the three hooks with their reminder text |
+| `model-tier-policy`  | [1.9.0](plugins/model-tier-policy/CHANGELOG.md)  | The tier-policy skill, eleven pinned-model agents, and the three hooks with their reminder text |
 | `git-workflow`       | [1.0.2](plugins/git-workflow/CHANGELOG.md)       | `start-session`, `end-session`                                                                  |
 | `project-management` | [1.0.2](plugins/project-management/CHANGELOG.md) | `ingest-artifact`, `record-decision`                                                            |
 | `time-tracking`      | [1.0.2](plugins/time-tracking/CHANGELOG.md)      | `session-timelog`, `time-report`                                                                |
@@ -79,8 +79,9 @@ persists its findings file; `scout` (Opus 5, read-only) investigates and returns
 `devils-advocate` (Opus 5, read-only) optionally stress-tests a plan before anyone builds it; and `runner` (Sonnet 5)
 handles bulk mechanical work. Three specialists sit beside them: `build-runner` (Sonnet 5) proves a ref in an isolated
 git worktree — one build at a time, lock-enforced, timed against a ledger — `build-analyst` (Haiku 4.5) triages
-failed-build logs from a path instead of re-running the build, and `git-steward` (Sonnet 5) commits and reconciles a
-coordinator's plan/tracker/addendum artifacts and keeps branches tidy, never touching feature work.
+failed-build logs from a path instead of re-running the build, and `git-steward` (Sonnet 5), resident for the session
+and messaged directly by every role that writes a tracked artifact, commits and reconciles the plan/tracker/addendum
+artifacts and keeps branches tidy, never touching feature work.
 
 Unlike the other skills here, copying the directory is not enough — it ships an installer that writes the rules file,
 the agents, and the hooks to the paths Claude Code reads, and enforcement comes from those:
@@ -122,19 +123,19 @@ The roles of the [model-tier-policy](plugins/model-tier-policy/skills/model-tier
 specialists that ship alongside them. Its installer writes these into a target repo for you; copy them by hand only if
 you want the roles without the enforcement.
 
-| Agent                                                                    | Model     | Description                                                                                                                 |
-| ------------------------------------------------------------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| [orchestrator](plugins/model-tier-policy/agents/orchestrator.md)         | Opus 5    | Coordinates from the main loop — tracker, tickets, dispatch; reads only the tracker and receipts; never works, never merges |
-| [architect](plugins/model-tier-policy/agents/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — reads the tickets it cites; returns a decision, not code                               |
-| [senior-developer](plugins/model-tier-policy/agents/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                                                                 |
-| [executor](plugins/model-tier-policy/agents/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                                                         |
-| [code-reviewer](plugins/model-tier-policy/agents/code-reviewer.md)       | Fable 5   | Adversarial read of the proven diff before the PR is ready; Opus 5 for follow-ups                                           |
-| [scout](plugins/model-tier-policy/agents/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                                                         |
-| [devils-advocate](plugins/model-tier-policy/agents/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict                                                        |
-| [runner](plugins/model-tier-policy/agents/runner.md)                     | Sonnet 5  | Bulk mechanical work — heavy builds go to build-runner                                                                      |
-| [build-runner](plugins/model-tier-policy/agents/build-runner.md)         | Sonnet 5  | Heavy builds in an isolated worktree — one at a time, timed, cleaned up                                                     |
-| [build-analyst](plugins/model-tier-policy/agents/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run                                          |
-| [git-steward](plugins/model-tier-policy/agents/git-steward.md)           | Sonnet 5  | Commits/reconciles coordination artifacts, PR and review-thread disposition, branch hygiene — never feature work            |
+| Agent                                                                    | Model     | Description                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [orchestrator](plugins/model-tier-policy/agents/orchestrator.md)         | Opus 5    | Coordinates from the main loop — tracker, tickets, dispatch; reads only the tracker and receipts; never works, never merges                                                                 |
+| [architect](plugins/model-tier-policy/agents/architect.md)               | Fable 5   | Framing, trade-offs, and decisions — reads the tickets it cites; returns a decision, not code                                                                                               |
+| [senior-developer](plugins/model-tier-policy/agents/senior-developer.md) | Fable 5   | Implementation too novel or entangled to hand off as a plan                                                                                                                                 |
+| [executor](plugins/model-tier-policy/agents/executor.md)                 | Opus 5    | The default worker: edits, refactors, tests, builds, git, debugging                                                                                                                         |
+| [code-reviewer](plugins/model-tier-policy/agents/code-reviewer.md)       | Fable 5   | Adversarial read of the proven diff before the PR is ready; Opus 5 for follow-ups                                                                                                           |
+| [scout](plugins/model-tier-policy/agents/scout.md)                       | Opus 5    | Read-only investigation that returns findings instead of file dumps                                                                                                                         |
+| [devils-advocate](plugins/model-tier-policy/agents/devils-advocate.md)   | Opus 5    | Read-only adversarial review of a plan — ranked objections + verdict                                                                                                                        |
+| [runner](plugins/model-tier-policy/agents/runner.md)                     | Sonnet 5  | Bulk mechanical work — heavy builds go to build-runner                                                                                                                                      |
+| [build-runner](plugins/model-tier-policy/agents/build-runner.md)         | Sonnet 5  | Heavy builds in an isolated worktree — one at a time, timed, cleaned up                                                                                                                     |
+| [build-analyst](plugins/model-tier-policy/agents/build-analyst.md)       | Haiku 4.5 | Build-log triage from a path: verdict or an honest `undetermined` — never a re-run                                                                                                          |
+| [git-steward](plugins/model-tier-policy/agents/git-steward.md)           | Sonnet 5  | Resident git custodian — spawned first, messaged directly by every writer; commits/reconciles coordination artifacts, PR and review-thread disposition, branch hygiene — never feature work |
 
 ## Installing an agent
 

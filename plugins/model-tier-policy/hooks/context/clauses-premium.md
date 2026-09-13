@@ -20,5 +20,5 @@ Merging is the owner's unless `authorization.merge_authority` says otherwise; de
 
 Verify repo state before asserting it, and after a compaction treat every remembered actor and approval as unverified.
 
-"{steward}" ({steward_model}) commits and pushes your plan, tracker, decision, and review files — dictate the update in
-one line.
+"{steward}" ({steward_model}) is resident, named steward: message it the path and a subject to commit your plan,
+tracker, decision, and review files — spawn it first if it is not in your roster.
