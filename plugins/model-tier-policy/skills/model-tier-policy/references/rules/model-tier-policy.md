@@ -138,10 +138,10 @@ the boundary, and a denial is never an invitation to find the spelling the tripw
    `.claude/reviews/`) itself and returns the verdict plus the file path; the caller routes fixes.
 10. Coordination artifacts — plan, tracker, addendum, decisions, reviews, the timing ledger — are committed, pushed, and
     reconciled by `git-steward` (Sonnet 5), resident: the coordinator spawns it once, named `steward`, before any other
-    dispatch, and whichever role wrote an artifact commits it by messaging the steward directly — the path and a
-    subject, one line — so the commit never passes through the coordinator. A coordinator edits tracker rows and
-    dictates addendum entries; it never runs git and never reads the addendum. Only the coordinator dictates a row's
-    `auth`. The steward touches only artifact paths — feature work is never its to push.
+    dispatch, and whichever role wrote an artifact commits it by messaging the steward directly —
+    `commit <path>: <subject>`, one line — so the commit never passes through the coordinator. A coordinator edits
+    tracker rows and dictates addendum entries; it never runs git and never reads the addendum. Only the coordinator
+    dictates a row's `auth`. The steward touches only artifact paths — feature work is never its to push.
 11. Cap the brief like the return. Operational constants live in the operating-rules file and briefs point at it —
     restating them is the failure the file exists to prevent. Literal content beyond a few lines (a PR body, a config
     block) goes to a file, and the brief passes the path; a brief that outweighs its return has the economics backward.
