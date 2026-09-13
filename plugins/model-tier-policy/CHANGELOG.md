@@ -20,6 +20,12 @@ entry that settles one of its items says so.
   Code CLI behaviour, not a plugin defect; the skill's remote section says to check `git diff` after a teardown (#16).
 - `build-analyst` is Gradle-first. Maven support is deliberately absent rather than shipped untested (#7).
 
+## 1.9.1 — 2026-09-13 — [#38](https://github.com/BinaryInfinityDev/claude-skills/pull/38)
+
+- **Changed:** the code reviewer's boundary clause separates the two paths a finding takes — the findings file is
+  committed by messaging the resident steward directly, while a finding posted on the PR is the coordinator's to decide
+  and the steward's reply tools carry it. Copilot's round on 1.9.0, which was fetchable on the branch.
+
 ## 1.9.0 — 2026-09-13 — [#38](https://github.com/BinaryInfinityDev/claude-skills/pull/38)
 
 Closes #37: every interaction routed through the coordinator accrues context there, and the steward round trip was paid

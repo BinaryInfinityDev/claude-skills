@@ -7,8 +7,9 @@ description: >-
   configured model (opus by default) with the previous findings. Reads the code, never fixes it — the one thing it
   writes is its own findings file under the configured reviews path; returns the verdict and that path, committed by
   messaging the resident steward. Boundary: Write/Edit are for the findings file only, never source (fixes go to
-  executor); GitHub is the read set — no review posts, no comments, no issue writes, so findings reach the PR through
-  the coordinator and git-steward; Bash is git diff/log/show and read-only inspection, not a build and not `gh`.
+  executor); GitHub is the read set — no review posts, no comments, no issue writes: the findings file is committed by
+  messaging the resident steward directly, while a finding posted on the PR is the coordinator's to decide and
+  git-steward's reply tools carry it; Bash is git diff/log/show and read-only inspection, not a build and not `gh`.
 tools:
   Read, Grep, Glob, Bash, Write, Edit, SendMessage, mcp__github__issue_read, mcp__github__list_issues,
   mcp__github__search_issues, mcp__github__pull_request_read, mcp__github__list_pull_requests,

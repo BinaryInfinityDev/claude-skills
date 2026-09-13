@@ -13,7 +13,7 @@ instead of copy-and-forget.
 
 | Plugin               | Version                                          | Contents                                                                                        |
 | -------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `model-tier-policy`  | [1.9.0](plugins/model-tier-policy/CHANGELOG.md)  | The tier-policy skill, eleven pinned-model agents, and the three hooks with their reminder text |
+| `model-tier-policy`  | [1.9.1](plugins/model-tier-policy/CHANGELOG.md)  | The tier-policy skill, eleven pinned-model agents, and the three hooks with their reminder text |
 | `git-workflow`       | [1.0.2](plugins/git-workflow/CHANGELOG.md)       | `start-session`, `end-session`                                                                  |
 | `project-management` | [1.0.2](plugins/project-management/CHANGELOG.md) | `ingest-artifact`, `record-decision`                                                            |
 | `time-tracking`      | [1.0.2](plugins/time-tracking/CHANGELOG.md)      | `session-timelog`, `time-report`                                                                |
